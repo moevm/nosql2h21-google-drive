@@ -1,0 +1,4 @@
+aiohttp==3.7.4.post0
+aiohttp-jinja2==1.5
+Jinja2==3.0.1
+motor==2.5.1
