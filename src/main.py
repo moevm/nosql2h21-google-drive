@@ -22,9 +22,7 @@ routes = web.RouteTableDef()
 @routes.get('/hello')
 @aiohttp_jinja2.template('hello.html')
 async def _(req):
-    client = aiomotor.AsyncIOMotorClient(MONGO_HOST, MONGO_PORT)
-    db = client[MONGO_DBNAME]
-    coll = db[MONGO_COLLNAME]
+    coll = req.app['db'][MONGO_COLLNAME]
 
     what = req.query.getone("what", "world")
 
@@ -56,6 +54,9 @@ def route_root(req):
 def make_app():
     app = web.Application()
     app.add_routes(routes)
+
+    app['dbclient'] = aiomotor.AsyncIOMotorClient(MONGO_HOST, MONGO_PORT)
+    app['db'] = app['dbclient'][MONGO_DBNAME]
 
     aiohttp_jinja2.setup(
         app,
