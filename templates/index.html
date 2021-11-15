@@ -5,11 +5,15 @@
   </head>
   <body>
     <h1>Index</h1>
+    {% if session_id is not none %}
+    <p>Session ID: <code>{{ session_id }}</code></p>
+    {% else %}
+    <p>No session</p>
+    {% endif %}
     <ul>
-      <li><a href="/hello">Hello world</a></li>
-      <li><a href="/hello?what=mongo">
-          Hello mongo (should give error)
-      </a></li>
+      {% for path in ["/authorize", "/whoami", "/logout"] %}
+      <li><a href="{{ path }}"><code>{{ path }}</code></a></li>
+      {% endfor %}
     </ul>
   </body>
 </html>
