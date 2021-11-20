@@ -47,9 +47,9 @@ def minjson(s):
     return json.dumps(json.loads(s))
 
 
-def query_oauth_authorize(req, scopes):
+async def query_oauth_authorize(req, scopes):
     sec = req.app['client_secret_json']['web']
-    d = req.app['oauth_dict']
+    db = req.app['db']
 
     assert not isinstance(scopes, str)
 
@@ -65,7 +65,14 @@ def query_oauth_authorize(req, scopes):
         'state':         suuid,
     }
 
-    d[suuid] = req.url
+    await db.sessions.update_one(
+        {'_id': suuid},
+        {
+            '$set': {'path': str(req.url.relative())},
+            '$unset': {'user_id': ""},
+        },
+        upsert=True,
+    )
 
     url = URL(uri).with_query(query)
 
@@ -114,7 +121,7 @@ async def user_info(req):
             else:
                 await db.sessions.delete_one({'_id': sid})
 
-    raise query_oauth_authorize(req, GOOGLE_API_SCOPES)
+    raise await query_oauth_authorize(req, GOOGLE_API_SCOPES)
 
 
 async def user_update_access(req, user, r, new=False):
@@ -133,9 +140,7 @@ async def user_update_access(req, user, r, new=False):
 
     db = req.app['db']
     await db.users.update_one(
-        {
-            '_id': uid,
-        },
+        {'_id': uid},
         {
             '$set': {
                 'auth_code': auth_code,
@@ -191,7 +196,7 @@ async def _(req):
 
 @routes.get('/authorize')
 async def _(req):
-    raise query_oauth_authorize(req, GOOGLE_API_SCOPES)
+    raise await query_oauth_authorize(req, GOOGLE_API_SCOPES)
 
 @routes.get('/logout')
 async def logout_route(req):
@@ -259,14 +264,20 @@ async def _(req):
 
 @routes.get('/google-oauth-return')
 async def _(req):
-    d = req.app['oauth_dict']
+    db = req.app['db']
+
     if state := req.query.getone('state', None):
-        original_url = d.get(state)
-        if original_url is not None:
-            del d[state]
+        sess = await db.sessions.find_one(
+            {'_id': state},
+            projection={'path': 1},
+        )
+        if sess is None or 'path' not in sess:
+            alog.warning('/google-oauth-return: have state but no record or no original url')
+            raise aioweb.HTTPBadRequest(
+                text='Invalid request: unknown session id',
+            )
         else:
-            alog.warning('/google-oauth-return: have state, but no original url, redirecting to /')
-            original_url = '/'
+            original_url = sess['path']
     else:
         alog.warning('/google-oauth-return but no state')
         original_url = None
@@ -317,10 +328,12 @@ async def _(req):
     # why generate another UUID when we can just reuse the old one?
     sid = state
 
-    db = req.app['db']
     await db.sessions.update_one(
         {'_id': sid},
-        {'$set': {'user_id': uid}},
+        {
+            '$set': {'user_id': uid},
+            '$unset': {'path': ""},
+        },
         upsert=True,
     )
 
@@ -350,7 +363,6 @@ async def make_app(argv):
 
     with open('secrets/client-secret.json') as f:
         app['client_secret_json'] = json.load(f)
-    app['oauth_dict'] = {}
 
     app['dbclient'] = aiomotor.AsyncIOMotorClient(MONGO_HOST, MONGO_PORT)
     app['db'] = app['dbclient'][MONGO_DBNAME]
