@@ -9,6 +9,8 @@ import datetime
 
 from multidict import CIMultiDict
 
+import alog
+
 import aiohttp
 import aiohttp.web as aioweb
 from yarl import URL
@@ -39,6 +41,10 @@ def pick_redirect_uri(req, uris):
     raise aioweb.HTTPInternalServerError(
         text=f'No redirect URL for host {hp}'
     )
+
+
+def minjson(s):
+    return json.dumps(json.loads(s))
 
 
 def query_oauth_authorize(req, scopes):
@@ -84,9 +90,8 @@ async def query_oauth_access(req, auth_code):
         async with session.post(uri, data=payload) as resp:
             if not resp.ok:
                 resp.content.set_exception(None)
-                errinfo = resp.content.read_nowait().decode()
-                print(f"{resp.status} {resp.reason}\n{errinfo}",
-                      file=sys.stderr)
+                errinfo = minjson(resp.content.read_nowait().decode())
+                alog.error(f"{resp.status} {resp.reason} {errinfo}")
                 return None
             return await resp.json()
 
@@ -259,7 +264,7 @@ async def _(req):
         original_url = d[state]
         del d[state]
     else:
-        print('WTF, google-oauth-return but no state', file=sys.stderr)
+        alog.warning('/google-oauth-return but no state')
         original_url = None
 
     if 'error' in req.query:
