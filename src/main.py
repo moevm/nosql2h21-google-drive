@@ -24,7 +24,7 @@ import motor.motor_asyncio as aiomotor
 MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 
-MONGO_DBNAME = 'fetch-files'
+MONGO_DBNAME = 'gdrivesorter'
 
 
 def hostport(url):
