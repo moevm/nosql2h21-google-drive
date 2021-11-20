@@ -261,8 +261,12 @@ async def _(req):
 async def _(req):
     d = req.app['oauth_dict']
     if state := req.query.getone('state', None):
-        original_url = d[state]
-        del d[state]
+        original_url = d.get(state)
+        if original_url is not None:
+            del d[state]
+        else:
+            alog.warning('/google-oauth-return: have state, but no original url, redirecting to /')
+            original_url = '/'
     else:
         alog.warning('/google-oauth-return but no state')
         original_url = None
@@ -314,10 +318,11 @@ async def _(req):
     sid = state
 
     db = req.app['db']
-    db.sessions.insert_one({
-        '_id': sid,
-        'user_id': uid,
-    })
+    await db.sessions.update_one(
+        {'_id': sid},
+        {'$set': {'user_id': uid}},
+        upsert=True,
+    )
 
     # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
 
