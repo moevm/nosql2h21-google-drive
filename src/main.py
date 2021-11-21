@@ -106,6 +106,7 @@ async def query_oauth_access(req, auth_code):
 GOOGLE_API_SCOPES = [
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/drive.readonly',
 ]
 
 
@@ -245,11 +246,122 @@ async def _(req):
         ],
     }
 
-@routes.get('/listfiles')
+@routes.get('/listdrives')
+@aiohttp_jinja2.template('drives.html')
 async def _(req):
-    return aioweb.Response(
-        text=f'Not implemented yet',
-    )
+    async with aiohttp.ClientSession() as session:
+        client = await gaggle_client(req, session)
+
+        drives = []
+
+        greq = {}
+        while True:
+            gresp = await client.drive('v3').drives.list(**greq)
+            if not gresp.ok:
+                gresp.content.set_exception(None)
+                errinfo = gresp.content.read_nowait().decode()
+                raise aioweb.HTTPInternalServerError(
+                    text=(f'API server returned status {gresp.status} {gresp.reason} {errinfo}'),
+                )
+
+            j = await gresp.json()
+
+            drives.extend(j['drives'])
+
+            if npt := j.get('nextPageToken'):
+                greq['pageToken'] = npt
+            else:
+                break
+
+    return {
+        'drives': drives,
+    }
+
+@routes.get('/listfiles')
+@aiohttp_jinja2.template('files.html')
+async def _(req):
+    n_files = int(n) if (n := req.query.get('n')) else 10000
+    do_filter = not bool(req.query.get('nofilter'))
+
+    async with aiohttp.ClientSession() as session:
+        client = await gaggle_client(req, session)
+
+        files = []
+
+        greq = {
+            'corpora': 'user',
+            'spaces': 'drive',
+            'fields': 'files(id,name,parents,mimeType,shared,sharedWithMeTime),nextPageToken',
+        }
+        while len(files) < n_files:
+            gresp = await client.drive('v3').files.list(**greq)
+            if not gresp.ok:
+                gresp.content.set_exception(None)
+                errinfo = gresp.content.read_nowait().decode()
+                raise aioweb.HTTPInternalServerError(
+                    text=(f'API server returned status {gresp.status} {gresp.reason} {errinfo}'),
+                )
+
+            j = await gresp.json()
+
+            files.extend(j['files'])
+
+            if npt := j.get('nextPageToken'):
+                greq['pageToken'] = npt
+            else:
+                break
+
+    if do_filter:
+        root_children = []
+        root_ids = set()
+        ftab = {
+            f['id']: (
+                {**f, 'children': []}
+                if f['mimeType'] == 'application/vnd.google-apps.folder'
+                else f
+            ) for f in files
+        }
+
+        for k, v in ftab.items():
+            pars = v.get('parents')
+            if pars is None:
+                continue
+            par_id = pars[0]
+            if p := ftab.get(par_id):
+                p['children'].append(k)
+            else:
+                root_children.append(k)
+                root_ids.add(par_id)
+
+        bad_ids = [k for k, v in ftab.items() if not v.get('parents')]
+        qidx = 0
+        while qidx < len(bad_ids):
+            bad_ids.extend(ftab[bad_ids[qidx]].get('children', []))
+            qidx += 1
+
+        bad_ids = set(bad_ids)
+        files_filtered = [v for k, v in ftab.items() if k not in bad_ids]
+
+        alog.debug(f'bad ids: {len(bad_ids)}, ok: {len(files_filtered)}')
+
+        if len(root_ids) != 1:
+            alog.warning(f'len(root_ids)!=1: {root_ids!r}')
+
+        files = [
+            {
+                'id': (list(root_ids) or [None])[0],
+                'mimeType': 'application/vnd.google-apps.folder',
+                'children': root_children,
+            },
+            *files_filtered,
+        ]
+
+    return {
+        'files': [
+            json.dumps(f, indent=2, ensure_ascii=False)
+            for f in files
+        ],
+    }
 
 @routes.get('/autherror')
 async def _(req):
