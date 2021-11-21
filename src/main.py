@@ -194,10 +194,6 @@ async def _(req):
         'session_id': req.cookies.get('session_id', None),
     }
 
-@routes.get('/authorize')
-async def _(req):
-    raise await query_oauth_authorize(req, GOOGLE_API_SCOPES)
-
 @routes.get('/logout')
 async def logout_route(req):
     if sid := req.cookies.get('session_id', None):

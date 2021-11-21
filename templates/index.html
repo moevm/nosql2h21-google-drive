@@ -11,7 +11,7 @@
     <p>No session</p>
     {% endif %}
     <ul>
-      {% for path in ["/authorize", "/whoami", "/logout"] %}
+      {% for path in ["/whoami", "/logout"] %}
       <li><a href="{{ path }}"><code>{{ path }}</code></a></li>
       {% endfor %}
     </ul>
