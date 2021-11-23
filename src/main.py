@@ -22,11 +22,14 @@ import gaggle
 
 import motor.motor_asyncio as aiomotor
 
+from math import trunc
+
 
 MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 
-MONGO_DBNAME = 'gdrivesorter'
+# MONGO_DBNAME = 'gdrivesorter'
+MONGO_DBNAME = 'fetch-files'
 
 
 def hostport(url):
@@ -196,6 +199,36 @@ async def _(req):
         'user': user,
     }
 
+
+async def childrenFiles(db, user_id, file_id):
+    if files := await db[f'files_{user_id}'].find_one({'_id': int(file_id)}):
+        return files
+
+
+@routes.get('/main')
+@aiohttp_jinja2.template('main.html')
+async def _(req):
+    sid = req.cookies.get('session_id', None)
+    user = (await user_info(req)) if sid else None
+
+    file_id = req.rel_url.query.get("id")
+    if file_id == None:
+        file_id = 0
+
+    db = req.app['db']
+    # получение файлов по id
+    files = await childrenFiles(db, user['_id'], file_id)
+    if files:
+        files = files['children']
+        for i in files:
+            i['file_id'] = trunc(i['file_id'])
+
+    return {
+        'name': user['name'],
+        'files': files
+    }
+
+
 @routes.get('/login')
 async def _(req):
     await user_info(req)
@@ -223,36 +256,36 @@ async def logout_route(req):
 
 routes.post('/logout')(logout_route)
 
-@routes.get('/whoami')
-@aiohttp_jinja2.template('whoami.html')
-async def _(req):
-    async with aiohttp.ClientSession() as session:
-        client = await gaggle_client(req, session)
-        resp = await client.people('v1').people.get(
-            resourceName='people/me',
-            personFields='names,emailAddresses',
-        )
-        if not resp.ok:
-            resp.content.set_exception(None)
-            errinfo = resp.content.read_nowait().decode()
-            raise aioweb.HTTPInternalServerError(
-                text=(f'API server returned status {resp.status} {resp.reason}'
-                      + errinfo),
-            )
-
-        j = await resp.json()
-
-    return {
-        'resource_name': j['resourceName'],
-        'names': [
-            n['displayName']
-            for n in j['names']
-        ],
-        'emails': [
-            e['value']
-            for e in j['emailAddresses']
-        ],
-    }
+# @routes.get('/whoami')
+# @aiohttp_jinja2.template('whoami.html')
+# async def _(req):
+#     async with aiohttp.ClientSession() as session:
+#         client = await gaggle_client(req, session)
+#         resp = await client.people('v1').people.get(
+#             resourceName='people/me',
+#             personFields='names,emailAddresses',
+#         )
+#         if not resp.ok:
+#             resp.content.set_exception(None)
+#             errinfo = resp.content.read_nowait().decode()
+#             raise aioweb.HTTPInternalServerError(
+#                 text=(f'API server returned status {resp.status} {resp.reason}'
+#                       + errinfo),
+#             )
+#
+#         j = await resp.json()
+#
+#     return {
+#         'resource_name': j['resourceName'],
+#         'names': [
+#             n['displayName']
+#             for n in j['names']
+#         ],
+#         'emails': [
+#             e['value']
+#             for e in j['emailAddresses']
+#         ],
+#     }
 
 @routes.get('/listfiles')
 async def _(req):

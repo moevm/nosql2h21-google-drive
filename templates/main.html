@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <title>whoami</title>
+      <style>
+        .all{
+          position: relative;
+          width: 100vw;
+          height: 100vh;
+          display: flex;
+          flex-direction: row;
+        }
+        .right{
+          display: flex;
+          flex-direction: column;
+          width: 65%;
+          height: 100%;
+        }
+        .left{
+          width: 35%;
+          height: 100%;
+          display:flex;
+          flex-direction: column;
+          border-right: solid
+        }
+
+        .top{
+          width: 100%;
+          height: 7%;
+          border-bottom: solid
+        }
+
+        .main{
+          width: 100%;
+          height: 93%;
+
+        }
+
+        .leftCheckbox{
+          width: 100%;
+          height: 7%;
+          padding-top: 5px;
+          padding-left: 15px;
+        }
+
+        .leftButton{
+          width: 100%;
+          height: 86%;
+        }
+
+
+        .exit{
+          width: 100%;
+          height: 7%;
+        }
+
+        #exit{
+          display: inline;
+          float: right;
+        }
+
+        #topButton{
+          display: inline;
+          padding-left: 15px;
+        }
+      </style>
+  </head>
+  <body>
+    <div class="all">
+      <div class="left">
+        <div class="leftCheckbox">
+          <input type="checkbox" id="1">
+          <lable for="1">Без подкатологов</lable>
+        </div>
+        <div class="leftButton"></div>
+        <div class="exit">
+          <div id="exit">
+            <form action="/logout">
+              <lable>{{ name }}</lable>
+              <button type="href" >EXIT</button>
+            </form>
+
+          </div>
+      </div>
+    </div>
+      <div class="right">
+        <div class="top">
+          <div id="topButton">
+            <button>Скачать</button>
+            <button>Переместить</button>
+            <button>Удалить</button>
+            <button>Выделить все</button>
+            <button>Обновить</button>
+          </div>
+        </div>
+        <div class="main">
+          {% if files %}
+          <ul>
+          {% for file in files %}
+            {% if file['type']==2 %}
+            <li><a href="/main?id={{ file['file_id'] }}"><code>{{ file['name'] }}</code></a></li>
+            {% endif %}
+            {% if file['type']!=2 %}
+            <li>{{ file['name'] }}</li>
+            {% endif %}
+          {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
