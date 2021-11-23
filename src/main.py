@@ -453,7 +453,8 @@ def child_record(f):
         'file_id': f['_id'],
         **{
             k: f[k]
-           for k in ['name', 'size', 'owner', 'shared_with', 'mtime']
+           for k in ['google_id', 'name', 'type', 'mime',
+                     'size', 'owner', 'shared_with', 'mtime']
         }
     }
 
