@@ -543,6 +543,7 @@ async def recreate_files_collection(req, user):
 
     await coll.insert_many(objs)
 
+    await db.drop_collection(collname)
     await coll.rename(collname)
 
 
