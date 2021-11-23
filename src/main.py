@@ -188,10 +188,20 @@ routes = aioweb.RouteTableDef()
 @routes.get('/')
 @aiohttp_jinja2.template('index.html')
 async def _(req):
+    sid = req.cookies.get('session_id', None)
+    user = (await user_info(req)) if sid else None
     return {
         'title': "Index",
-        'session_id': req.cookies.get('session_id', None),
+        'session_id': sid,
+        'user': user,
     }
+
+@routes.get('/login')
+async def _(req):
+    await user_info(req)
+    raise aioweb.HTTPFound(
+        location='/',
+    )
 
 @routes.get('/logout')
 async def logout_route(req):
