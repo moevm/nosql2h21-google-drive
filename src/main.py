@@ -438,7 +438,7 @@ def file_from_gdrive(f):
             }
             for perm in other_perms
         ],
-        'size': f.get('size', None),
+        'size': int(s) if (s := f.get('size', None)) else None,
         'shared_via_link': (None if anyone_perm is None
                             else role_to_access_mode(anyone_perm['role'])),
         'mtime': datetime.datetime.strptime(f['modifiedTime'], DATETIME_FORMAT),
