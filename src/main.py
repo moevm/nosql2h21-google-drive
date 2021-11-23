@@ -47,7 +47,7 @@ def minjson(s):
     return json.dumps(json.loads(s))
 
 
-async def query_oauth_authorize(req, scopes):
+async def query_oauth_authorize(req, scopes, dest_uri=None):
     sec = req.app['client_secret_json']['web']
     db = req.app['db']
 
@@ -65,10 +65,12 @@ async def query_oauth_authorize(req, scopes):
         'state':         suuid,
     }
 
+    dest = str(dest_uri or req.url.relative())
+
     await db.sessions.update_one(
         {'_id': suuid},
         {
-            '$set': {'path': str(req.url.relative())},
+            '$set': {'path': dest},
             '$unset': {'user_id': ""},
         },
         upsert=True,
@@ -182,6 +184,16 @@ async def gaggle_client(req, session):
         client_secret=sec['client_secret'],
     )
 
+async def do_logout(db, sid):
+    # Max-Age=0 expires the cookie immediately
+    cookie_headers = CIMultiDict([
+        ('Set-Cookie', f"session_id={sid}; Max-Age=0"),
+    ])
+
+    await db.sessions.delete_one({'_id': sid})
+
+    return cookie_headers
+
 
 routes = aioweb.RouteTableDef()
 
@@ -189,33 +201,47 @@ routes = aioweb.RouteTableDef()
 @aiohttp_jinja2.template('index.html')
 async def _(req):
     sid = req.cookies.get('session_id', None)
-    user = (await user_info(req)) if sid else None
+    if sid is None:
+        raise aioweb.HTTPFound(location='/login')
+
+    # TODO: redirect to root dir page
+
+    user = await user_info(req)
     return {
         'title': "Index",
         'session_id': sid,
         'user': user,
     }
 
-@routes.get('/login')
+
+@routes.get('/dologin')
 async def _(req):
-    await user_info(req)
-    raise aioweb.HTTPFound(
-        location='/',
-    )
+    raise await query_oauth_authorize(req, GOOGLE_API_SCOPES,
+                                      dest_uri='/')
+
+
+@routes.get('/login')
+@aiohttp_jinja2.template('login.html')
+async def _(req):
+    if sid := req.cookies.get('session_id', None):
+        cookie_headers = await do_logout(req.app['db'], sid)
+        # Basically, log out and try again
+        raise aioweb.HTTPFound(
+            location='/login',
+            headers=cookie_headers,
+        )
+
+    return {
+        'url': "/dologin",
+    }
+
 
 @routes.get('/logout')
 async def logout_route(req):
     if sid := req.cookies.get('session_id', None):
-        # Max-Age=0 expires the cookie immediately
-        cookie_headers = CIMultiDict([
-            ('Set-Cookie', f"session_id={sid}; Max-Age=0"),
-        ])
-
-        db = req.app['db']
-        await db.sessions.delete_one({'_id': sid})
+        cookie_headers = await do_logout(req.app['db'], sid)
     else:
         cookie_headers = {}
-
     raise aioweb.HTTPFound(
         location='/',
         headers=cookie_headers,
@@ -348,7 +374,7 @@ async def _(req):
     # Note: sid is a UUID string, so its character set is [0-9a-f-].
     # TODO: configure Max-Age
     cookie_headers = CIMultiDict([
-        ('Set-Cookie', f"session_id={sid}; Max-Age=60"),
+        ('Set-Cookie', f"session_id={sid}; Max-Age=3600"),
     ])
 
     if original_url is None:
