@@ -30,7 +30,6 @@ MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 
 MONGO_DBNAME = 'gdrivesorter'
-# MONGO_DBNAME = 'fetch-files'
 
 
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
@@ -256,6 +255,7 @@ async def _(req):
     files = await childrenFiles(db, user['_id'], file_id)
     if files:
         dirs = files['upper_dirs']
+        dirs.append({'id':files['_id'], 'name':files['name']})
         files = files['children']
         for i in files:
             i['file_id'] = trunc(i['file_id'])
@@ -265,17 +265,10 @@ async def _(req):
             if i['owner']['name'] == user['name']:
                 i['owner']['name'] = 'я'
 
-        # print(type(files[0]['mtime']))
-        # print(files[0]['mtime'])
-        # print(files[0]['mtime'].strftime("%Y-%m-%d"))
-
-
-
     return {
         'name': user['name'],
         'files': files,
         'dirs': dirs,
-        'len_dirs': len(dirs)
     }
 
 @routes.get('/dologin')
@@ -311,38 +304,6 @@ async def logout_route(req):
     )
 
 routes.post('/logout')(logout_route)
-
-# @routes.get('/whoami')
-# @aiohttp_jinja2.template('whoami.html')
-# async def _(req):
-#     async with aiohttp.ClientSession() as session:
-#         user = await user_info(req)
-#         client = await gaggle_client_for_user(req, user, session)
-#         resp = await client.people('v1').people.get(
-#             resourceName='people/me',
-#             personFields='names,emailAddresses',
-#         )
-#         if not resp.ok:
-#             resp.content.set_exception(None)
-#             errinfo = resp.content.read_nowait().decode()
-#             raise aioweb.HTTPInternalServerError(
-#                 text=(f'API server returned status {resp.status} {resp.reason}'
-#                       + errinfo),
-#             )
-#
-#         j = await resp.json()
-#
-#     return {
-#         'resource_name': j['resourceName'],
-#         'names': [
-#             n['displayName']
-#             for n in j['names']
-#         ],
-#         'emails': [
-#             e['value']
-#             for e in j['emailAddresses']
-#         ],
-#     }
 
 
 class PaginatedRequestError:
@@ -602,35 +563,13 @@ async def _(req):
     raise aioweb.HTTPFound(location='/')
 
 
-@routes.get('/get')
-async def _(req):
-    user = await user_info(req)
-    fid = int(req.query.getone('id', 0))
-    collname = make_files_collname(user)
-
-    class DatetimeJSONEncoder(json.JSONEncoder):
-        def default(self, o):
-            if isinstance(o, datetime.datetime):
-                return o.strftime(DATETIME_FORMAT)
-            else:
-                return super().default(o)
-
-    if j := await req.app['db'][collname].find_one({'_id': fid}):
-        return aioweb.Response(
-            text=DatetimeJSONEncoder(indent=2, ensure_ascii=False).encode(j),
-        )
-    else:
-        raise aioweb.HTTPNotFound(
-            text=f"No file with id {fid}",
-        )
-
-
 @routes.get('/autherror')
 async def _(req):
     err = req.query.getone('error', '(error missing)')
     return aioweb.Response(
         text=f'App authentication failed: {err}',
     )
+
 
 @routes.get('/google-oauth-return')
 async def _(req):

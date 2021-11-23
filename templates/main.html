@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-      <title>whoami</title>
+      <title>main</title>
       <style>
         .all{
           position: relative;
@@ -70,13 +70,13 @@
       <div class="left">
         <div class="leftCheckbox">
           <input type="checkbox" id="1">
-          <lable for="1">Без подкатологов</lable>
+          <label for="1">Без подкатологов</label>
         </div>
         <div class="leftButton"></div>
         <div class="exit">
           <div id="exit">
             <form action="/logout">
-              <lable>{{ name }}</lable>
+              <label>{{ name }}</label>
               <button type="href" >EXIT</button>
             </form>
 
@@ -98,9 +98,6 @@
             {% for d in dirs %}
             <td><a href="/main?id={{ d['id'] }}"><code>{{ d['name'] }}</code></a></td>
             {% endfor %}
-            {% if len_dirs == 0%}
-            <td><a href="/main?id=0"><code>Мой диск</code></a></td>
-            {% endif %}
           </table>
           {% if files %}
           <table>
