@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Files</title>
+  </head>
+  <body>
+    <h1>Your files</h1>
+    <ol>
+      {% for f in files %}
+      <li><pre><code>{{ f }}</code></pre></li>
+      {% endfor %}
+    </ol>
+  </body>
+</html>
