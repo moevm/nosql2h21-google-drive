@@ -546,6 +546,37 @@ async def recreate_files_collection(req, user):
     await coll.rename(collname)
 
 
+@routes.get('/reload')
+async def _(req):
+    user = await user_info(req)
+    await recreate_files_collection(req, user)
+
+    raise aioweb.HTTPFound(location='/')
+
+
+@routes.get('/get')
+async def _(req):
+    user = await user_info(req)
+    fid = int(req.query.getone('id', 0))
+    collname = f"files_{user['_id']}"
+
+    class DatetimeJSONEncoder(json.JSONEncoder):
+        def default(self, o):
+            if isinstance(o, datetime.datetime):
+                return o.strftime(DATETIME_FORMAT)
+            else:
+                return super().default(o)
+
+    if j := await req.app['db'][collname].find_one({'_id': fid}):
+        return aioweb.Response(
+            text=DatetimeJSONEncoder(indent=2, ensure_ascii=False).encode(j),
+        )
+    else:
+        raise aioweb.HTTPNotFound(
+            text=f"No file with id {fid}",
+        )
+
+
 @routes.get('/autherror')
 async def _(req):
     err = req.query.getone('error', '(error missing)')
