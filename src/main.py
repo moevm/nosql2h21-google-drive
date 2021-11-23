@@ -173,9 +173,7 @@ async def user_access(req, user):
     return await user_request_update_access(req, user)
 
 
-async def gaggle_client(req, session):
-    user = await user_info(req)
-    tok = await user_access(req, user)
+def gaggle_client_for_token(req, tok, session):
     sec = req.app['client_secret_json']['web']
     return gaggle.Client(
         session=session,
@@ -183,6 +181,10 @@ async def gaggle_client(req, session):
         client_id=sec['client_id'],
         client_secret=sec['client_secret'],
     )
+
+async def gaggle_client_for_user(req, user, session):
+    tok = await user_access(req, user)
+    return gaggle_client_for_token(req, tok, session)
 
 
 routes = aioweb.RouteTableDef()
@@ -219,7 +221,8 @@ routes.post('/logout')(logout_route)
 @aiohttp_jinja2.template('whoami.html')
 async def _(req):
     async with aiohttp.ClientSession() as session:
-        client = await gaggle_client(req, session)
+        user = await user_info(req)
+        client = await gaggle_client_for_user(req, user, session)
         resp = await client.people('v1').people.get(
             resourceName='people/me',
             personFields='names,emailAddresses',
@@ -246,36 +249,94 @@ async def _(req):
         ],
     }
 
+
+class PaginatedRequestError:
+    def __init__(self, resp):
+        self.resp = resp
+
+async def request_with_pagination(
+        method, req_dict, data_key,
+        resp_key='nextPageToken',
+        req_key='pageToken',
+):
+    res = []
+    req_copy = {**req_dict}
+    while True:
+        resp = await method(**req_copy)
+        if not resp.ok:
+            raise PaginatedRequestError(resp)
+
+        j = await resp.json()
+        res.extend(j[data_key])
+
+        if tok := j.get(resp_key):
+            req_copy[req_key] = tok
+        else:
+            break
+
+    return res
+
+
 @routes.get('/listdrives')
 @aiohttp_jinja2.template('drives.html')
 async def _(req):
     async with aiohttp.ClientSession() as session:
-        client = await gaggle_client(req, session)
+        user = await user_info(req)
+        client = await gaggle_client_for_user(req, user, session)
 
-        drives = []
-
-        greq = {}
-        while True:
-            gresp = await client.drive('v3').drives.list(**greq)
-            if not gresp.ok:
-                gresp.content.set_exception(None)
-                errinfo = gresp.content.read_nowait().decode()
-                raise aioweb.HTTPInternalServerError(
-                    text=(f'API server returned status {gresp.status} {gresp.reason} {errinfo}'),
-                )
-
-            j = await gresp.json()
-
-            drives.extend(j['drives'])
-
-            if npt := j.get('nextPageToken'):
-                greq['pageToken'] = npt
-            else:
-                break
+        drives = await request_with_pagination(
+            client.drive('v3').drives.list, {}, 'drives')
 
     return {
         'drives': drives,
     }
+
+
+def filter_gdrive_files(files):
+    root_children = []
+    root_ids = set()
+    ftab = {
+        f['id']: (
+            {**f, 'children': []}
+            if f['mimeType'] == 'application/vnd.google-apps.folder'
+            else f
+        ) for f in files
+    }
+
+    for k, v in ftab.items():
+        pars = v.get('parents')
+        if pars is None:
+            continue
+        par_id = pars[0]
+        if p := ftab.get(par_id):
+            p['children'].append(k)
+        else:
+            root_children.append(k)
+            root_ids.add(par_id)
+
+    bad_ids = [k for k, v in ftab.items() if not v.get('parents')]
+    qidx = 0
+    while qidx < len(bad_ids):
+        bad_ids.extend(ftab[bad_ids[qidx]].get('children', []))
+        qidx += 1
+
+    bad_ids = set(bad_ids)
+    files_filtered = [v for k, v in ftab.items() if k not in bad_ids]
+
+    alog.debug(f'bad ids: {len(bad_ids)}, ok: {len(files_filtered)}')
+
+    if len(root_ids) != 1:
+        alog.warning(f'len(root_ids)!=1: {root_ids!r}')
+
+    return [
+        {
+            'id': (list(root_ids) or [None])[0],
+            'mimeType': 'application/vnd.google-apps.folder',
+            'children': root_children,
+        },
+        *files_filtered,
+    ]
+
 
 @routes.get('/listfiles')
 @aiohttp_jinja2.template('files.html')
@@ -284,77 +345,20 @@ async def _(req):
     do_filter = not bool(req.query.get('nofilter'))
 
     async with aiohttp.ClientSession() as session:
-        client = await gaggle_client(req, session)
-
-        files = []
+        user = await user_info(req)
+        client = await gaggle_client_for_user(req, user, session)
 
         greq = {
             'corpora': 'user',
             'spaces': 'drive',
             'fields': 'files(id,name,parents,mimeType,shared,sharedWithMeTime),nextPageToken',
         }
-        while len(files) < n_files:
-            gresp = await client.drive('v3').files.list(**greq)
-            if not gresp.ok:
-                gresp.content.set_exception(None)
-                errinfo = gresp.content.read_nowait().decode()
-                raise aioweb.HTTPInternalServerError(
-                    text=(f'API server returned status {gresp.status} {gresp.reason} {errinfo}'),
-                )
 
-            j = await gresp.json()
-
-            files.extend(j['files'])
-
-            if npt := j.get('nextPageToken'):
-                greq['pageToken'] = npt
-            else:
-                break
+        files = await request_with_pagination(
+            client.drive('v3').files.list, greq, 'files')
 
     if do_filter:
-        root_children = []
-        root_ids = set()
-        ftab = {
-            f['id']: (
-                {**f, 'children': []}
-                if f['mimeType'] == 'application/vnd.google-apps.folder'
-                else f
-            ) for f in files
-        }
-
-        for k, v in ftab.items():
-            pars = v.get('parents')
-            if pars is None:
-                continue
-            par_id = pars[0]
-            if p := ftab.get(par_id):
-                p['children'].append(k)
-            else:
-                root_children.append(k)
-                root_ids.add(par_id)
-
-        bad_ids = [k for k, v in ftab.items() if not v.get('parents')]
-        qidx = 0
-        while qidx < len(bad_ids):
-            bad_ids.extend(ftab[bad_ids[qidx]].get('children', []))
-            qidx += 1
-
-        bad_ids = set(bad_ids)
-        files_filtered = [v for k, v in ftab.items() if k not in bad_ids]
-
-        alog.debug(f'bad ids: {len(bad_ids)}, ok: {len(files_filtered)}')
-
-        if len(root_ids) != 1:
-            alog.warning(f'len(root_ids)!=1: {root_ids!r}')
-
-        files = [
-            {
-                'id': (list(root_ids) or [None])[0],
-                'mimeType': 'application/vnd.google-apps.folder',
-                'children': root_children,
-            },
-            *files_filtered,
-        ]
+        files = filter_gdrive_files(files)
 
     return {
         'files': [
