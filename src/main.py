@@ -6,6 +6,7 @@ import uuid
 import asyncio
 import queue
 import datetime
+from enum import IntEnum, auto
 
 from multidict import CIMultiDict
 
@@ -32,6 +33,9 @@ MONGO_PORT = 27017
 MONGO_DBNAME = 'fetch-files'
 
 
+DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
+
+
 def hostport(url):
     return f"{url.host}:{url.port}"
 
@@ -50,7 +54,15 @@ def minjson(s):
     return json.dumps(json.loads(s))
 
 
-async def query_oauth_authorize(req, scopes):
+# Return files collection name for user
+# If work=True, returns tmp collection name for updates
+def make_files_collname(user, work=False):
+    prefix = 'tmp_files' if work else 'files'
+    uid = user['_id']
+    return f"{prefix}_{uid}"
+
+
+async def query_oauth_authorize(req, scopes, dest_uri=None):
     sec = req.app['client_secret_json']['web']
     db = req.app['db']
 
@@ -68,10 +80,12 @@ async def query_oauth_authorize(req, scopes):
         'state':         suuid,
     }
 
+    dest = str(dest_uri or req.url.relative())
+
     await db.sessions.update_one(
         {'_id': suuid},
         {
-            '$set': {'path': str(req.url.relative())},
+            '$set': {'path': dest},
             '$unset': {'user_id': ""},
         },
         upsert=True,
@@ -109,6 +123,7 @@ async def query_oauth_access(req, auth_code):
 GOOGLE_API_SCOPES = [
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/drive.readonly',
 ]
 
 
@@ -174,9 +189,7 @@ async def user_access(req, user):
     return await user_request_update_access(req, user)
 
 
-async def gaggle_client(req, session):
-    user = await user_info(req)
-    tok = await user_access(req, user)
+def gaggle_client_for_token(req, tok, session):
     sec = req.app['client_secret_json']['web']
     return gaggle.Client(
         session=session,
@@ -185,6 +198,20 @@ async def gaggle_client(req, session):
         client_secret=sec['client_secret'],
     )
 
+async def gaggle_client_for_user(req, user, session):
+    tok = await user_access(req, user)
+    return gaggle_client_for_token(req, tok, session)
+
+async def do_logout(db, sid):
+    # Max-Age=0 expires the cookie immediately
+    cookie_headers = CIMultiDict([
+        ('Set-Cookie', f"session_id={sid}; Max-Age=0"),
+    ])
+
+    await db.sessions.delete_one({'_id': sid})
+
+    return cookie_headers
+
 
 routes = aioweb.RouteTableDef()
 
@@ -192,11 +219,20 @@ routes = aioweb.RouteTableDef()
 @aiohttp_jinja2.template('index.html')
 async def _(req):
     sid = req.cookies.get('session_id', None)
-    user = (await user_info(req)) if sid else None
+    if sid is None:
+        raise aioweb.HTTPFound(location='/login')
+
+    # TODO: redirect to root dir page
+
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+    nfiles = await coll.count_documents({})
+
     return {
         'title': "Index",
         'session_id': sid,
         'user': user,
+        'nfiles': nfiles,
     }
 
 
@@ -228,27 +264,33 @@ async def _(req):
         'files': files
     }
 
+@routes.get('/dologin')
+async def _(req):
+    raise await query_oauth_authorize(req, GOOGLE_API_SCOPES,
+                                      dest_uri='/')
 
 @routes.get('/login')
+@aiohttp_jinja2.template('login.html')
 async def _(req):
-    await user_info(req)
-    raise aioweb.HTTPFound(
-        location='/',
-    )
+    if sid := req.cookies.get('session_id', None):
+        cookie_headers = await do_logout(req.app['db'], sid)
+        # Basically, log out and try again
+        raise aioweb.HTTPFound(
+            location='/login',
+            headers=cookie_headers,
+        )
+
+    return {
+        'url': "/dologin",
+    }
+
 
 @routes.get('/logout')
 async def logout_route(req):
     if sid := req.cookies.get('session_id', None):
-        # Max-Age=0 expires the cookie immediately
-        cookie_headers = CIMultiDict([
-            ('Set-Cookie', f"session_id={sid}; Max-Age=0"),
-        ])
-
-        db = req.app['db']
-        await db.sessions.delete_one({'_id': sid})
+        cookie_headers = await do_logout(req.app['db'], sid)
     else:
         cookie_headers = {}
-
     raise aioweb.HTTPFound(
         location='/',
         headers=cookie_headers,
@@ -256,42 +298,318 @@ async def logout_route(req):
 
 routes.post('/logout')(logout_route)
 
-# @routes.get('/whoami')
-# @aiohttp_jinja2.template('whoami.html')
-# async def _(req):
-#     async with aiohttp.ClientSession() as session:
-#         client = await gaggle_client(req, session)
-#         resp = await client.people('v1').people.get(
-#             resourceName='people/me',
-#             personFields='names,emailAddresses',
-#         )
-#         if not resp.ok:
-#             resp.content.set_exception(None)
-#             errinfo = resp.content.read_nowait().decode()
-#             raise aioweb.HTTPInternalServerError(
-#                 text=(f'API server returned status {resp.status} {resp.reason}'
-#                       + errinfo),
-#             )
-#
-#         j = await resp.json()
-#
-#     return {
-#         'resource_name': j['resourceName'],
-#         'names': [
-#             n['displayName']
-#             for n in j['names']
-#         ],
-#         'emails': [
-#             e['value']
-#             for e in j['emailAddresses']
-#         ],
-#     }
-
-@routes.get('/listfiles')
+@routes.get('/whoami')
+@aiohttp_jinja2.template('whoami.html')
 async def _(req):
-    return aioweb.Response(
-        text=f'Not implemented yet',
-    )
+    async with aiohttp.ClientSession() as session:
+        user = await user_info(req)
+        client = await gaggle_client_for_user(req, user, session)
+        resp = await client.people('v1').people.get(
+            resourceName='people/me',
+            personFields='names,emailAddresses',
+        )
+        if not resp.ok:
+            resp.content.set_exception(None)
+            errinfo = resp.content.read_nowait().decode()
+            raise aioweb.HTTPInternalServerError(
+                text=(f'API server returned status {resp.status} {resp.reason}'
+                      + errinfo),
+            )
+
+        j = await resp.json()
+
+    return {
+        'resource_name': j['resourceName'],
+        'names': [
+            n['displayName']
+            for n in j['names']
+        ],
+        'emails': [
+            e['value']
+            for e in j['emailAddresses']
+        ],
+    }
+
+
+class PaginatedRequestError:
+    def __init__(self, resp):
+        self.resp = resp
+
+async def request_with_pagination(
+        method, req_dict, data_key,
+        resp_key='nextPageToken',
+        req_key='pageToken',
+):
+    res = []
+    req_copy = {**req_dict}
+    while True:
+        resp = await method(**req_copy)
+        if not resp.ok:
+            raise PaginatedRequestError(resp)
+
+        j = await resp.json()
+        res.extend(j[data_key])
+
+        if tok := j.get(resp_key):
+            req_copy[req_key] = tok
+        else:
+            break
+
+    return res
+
+
+def filter_gdrive_files(files):
+    root_children = []
+    root_ids = set()
+    ftab = {
+        f['id']: (
+            {**f, 'children': []}
+            if f['mimeType'] == 'application/vnd.google-apps.folder'
+            else f
+        ) for f in files
+    }
+
+    for k, v in ftab.items():
+        pars = v.get('parents')
+        if pars is None:
+            continue
+        par_id = pars[0]
+        if p := ftab.get(par_id):
+            p['children'].append(k)
+        else:
+            root_children.append(k)
+            root_ids.add(par_id)
+
+    bad_ids = [k for k, v in ftab.items() if not v.get('parents')]
+    qidx = 0
+    while qidx < len(bad_ids):
+        bad_ids.extend(ftab[bad_ids[qidx]].get('children', []))
+        qidx += 1
+
+    bad_ids = set(bad_ids)
+    files_filtered = [v for k, v in ftab.items() if k not in bad_ids]
+
+    alog.debug(f'bad ids: {len(bad_ids)}, ok: {len(files_filtered)}')
+
+    if len(root_ids) != 1:
+        alog.warning(f'len(root_ids)!=1: {root_ids!r}')
+
+    return [
+        {
+            'id': (list(root_ids) or [None])[0],
+            'mimeType': 'application/vnd.google-apps.folder',
+            'children': root_children,
+        },
+        *files_filtered,
+    ]
+
+
+class FileType(IntEnum):
+    REGULAR = auto()
+    DIRECTORY = auto()
+    GOOGLE_WORKSPACE = auto()
+    UNKNOWN = auto()
+
+def mime_to_file_type(mime):
+    if mime == 'application/vnd.google-apps.folder':
+        return FileType.DIRECTORY
+    elif mime in ('application/vnd.google-apps.drive-sdk',
+                  'application/vnd.google-apps.shortcut'):
+        return FileType.UNKNOWN
+    elif mime.startswith('application/vnd.google-apps.'):
+        return FileType.GOOGLE_WORKSPACE
+    else:
+        return FileType.REGULAR
+
+class AccessMode(IntEnum):
+    RO = auto()
+    COMMENT = auto()
+    RW = auto()
+
+def role_to_access_mode(role):
+    if role == 'reader':
+        return AccessMode.RO
+    elif role == 'commenter':
+        return AccessMode.COMMENT
+    else:
+        return AccessMode.RW
+
+def perm_to_name_email(perm):
+    return {
+        'name': perm['displayName'],
+        'email': perm.get('emailAddress'),
+    }
+
+def file_from_gdrive(f):
+    anyone_perm = None
+    owner_perm = None
+    other_perms = []
+
+    for perm in f['permissions']:
+        if perm['type'] == 'anyone':
+            assert anyone_perm is None
+            anyone_perm = perm
+        elif perm['role'] == 'owner':
+            assert owner_perm is None
+            owner_perm = perm
+        else:
+            # Note: non-user permissions are also saved
+            other_perms.append(perm)
+
+    return {
+        'google_id': f['id'],
+        'name': f['name'],
+        'type': mime_to_file_type(f['mimeType']),
+        'mime': f['mimeType'],
+        'owner': (None if owner_perm is None
+                  else perm_to_name_email(owner_perm)),
+        'shared_with': [
+            {
+                **perm_to_name_email(perm),
+                'access': role_to_access_mode(perm['role']),
+            }
+            for perm in other_perms
+        ],
+        'size': int(s) if (s := f.get('size', None)) else None,
+        'shared_via_link': (None if anyone_perm is None
+                            else role_to_access_mode(anyone_perm['role'])),
+        'mtime': datetime.datetime.strptime(f['modifiedTime'], DATETIME_FORMAT),
+        'parent': ps[0] if (ps := f.get('parents')) else None,
+        'children': f.get('children'),
+        'upper_dirs': None,
+    }
+
+
+def child_record(f):
+    return {
+        'file_id': f['_id'],
+        **{
+            k: f[k]
+           for k in ['google_id', 'name', 'type', 'mime',
+                     'size', 'owner', 'shared_with', 'mtime']
+        }
+    }
+
+def handle_references(files):
+    ftab = {f['google_id']: f for f in files}
+
+    for f in files:
+        if p := f['parent']:
+            f['parent'] = ftab[p]['_id']
+        if ch := f['children']:
+            f['children'] = [
+                child_record(ftab[ch])
+                for ch in ch
+            ]
+
+
+def handle_upper_dirs(files):
+    files[0]['upper_dirs'] = []
+
+    s = [0]
+    while s:
+        s, t = [], s
+        for x in t:
+            rec = files[x]
+            ud = [
+                *rec['upper_dirs'],
+                {
+                    'id': x,
+                    'name': rec['name'],
+                },
+            ]
+            if ch := rec['children']:
+                for c in ch:
+                    cid = c['file_id']
+                    files[cid]['upper_dirs'] = ud
+                    s.append(cid)
+
+
+async def recreate_files_collection(req, user):
+    async with aiohttp.ClientSession() as session:
+        client = await gaggle_client_for_user(req, user, session)
+
+        props = ",".join([
+            "id", "name", "parents", "mimeType",
+            "permissions",
+            "size", "modifiedTime",
+        ])
+        greq = {
+            'corpora': 'user',
+            'spaces': 'drive',
+            'fields': f'files({props}),nextPageToken',
+        }
+
+        files_src = await request_with_pagination(
+            client.drive('v3').files.list, greq, 'files')
+
+        files = filter_gdrive_files(files_src)
+
+        root = files[0]
+        resp = await client.drive('v3').files.get(
+            fileId=root['id'],
+            fields=props,
+        )
+        assert resp.ok
+        files[0] = {
+            **(await resp.json()),
+            'children': root['children'],
+        }
+
+    db = req.app['db']
+    collname = make_files_collname(user)
+
+    new_collname = make_files_collname(user, True)
+    new_coll = db[new_collname]
+    await new_coll.delete_many({})
+
+    objs = [
+        {
+            '_id': i,
+            **file_from_gdrive(f),
+        }
+        for i, f in enumerate(files)
+    ]
+
+    handle_references(objs)
+    handle_upper_dirs(objs)
+
+    await new_coll.insert_many(objs)
+
+    await db.drop_collection(collname)
+    await new_coll.rename(collname)
+
+
+@routes.get('/reload')
+async def _(req):
+    user = await user_info(req)
+    await recreate_files_collection(req, user)
+
+    raise aioweb.HTTPFound(location='/')
+
+
+@routes.get('/get')
+async def _(req):
+    user = await user_info(req)
+    fid = int(req.query.getone('id', 0))
+    collname = make_files_collname(user)
+
+    class DatetimeJSONEncoder(json.JSONEncoder):
+        def default(self, o):
+            if isinstance(o, datetime.datetime):
+                return o.strftime(DATETIME_FORMAT)
+            else:
+                return super().default(o)
+
+    if j := await req.app['db'][collname].find_one({'_id': fid}):
+        return aioweb.Response(
+            text=DatetimeJSONEncoder(indent=2, ensure_ascii=False).encode(j),
+        )
+    else:
+        raise aioweb.HTTPNotFound(
+            text=f"No file with id {fid}",
+        )
+
 
 @routes.get('/autherror')
 async def _(req):
@@ -345,7 +663,7 @@ async def _(req):
         ).people('v1')
         resp = await people.people.get(
             resourceName='people/me',
-            personFields='metadata,names,emailAddresses',
+            personFields='metadata,names',
         )
         if not resp.ok:
             resp.content.set_exception(None)
@@ -360,7 +678,6 @@ async def _(req):
         info = {
             'auth_code': auth_code,
             'name': j['names'][0]['displayName'],
-            'email': j['emailAddresses'][0]['value'],
         }
 
     await user_update_access(req, uid, info, r, new=True)
@@ -382,7 +699,7 @@ async def _(req):
     # Note: sid is a UUID string, so its character set is [0-9a-f-].
     # TODO: configure Max-Age
     cookie_headers = CIMultiDict([
-        ('Set-Cookie', f"session_id={sid}; Max-Age=60"),
+        ('Set-Cookie', f"session_id={sid}; Max-Age=3600"),
     ])
 
     if original_url is None:

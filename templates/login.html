@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Сортировщик Google Drive</title>
+    <style>
+      body {
+          max-width: 40em;
+          margin-left: auto;
+          margin-right: auto;
+      }
+      .center-container {
+          display: flex;
+          flex-direction: row;
+          justify-content: center;
+      }
+      .button-link {
+          padding: 0.5rem 2rem;
+          border: 1px black solid;
+          background: darkgrey;
+          color: black;
+          text-decoration: none;
+          display: inline-block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Сортировщик Google Drive</h1>
+    <p>
+      Для использования данного сервиса, вы должны войти в свой Google
+      аккаунт.
+    </p>
+    <div class="center-container">
+      <a class="button-link" href="{{ url }}">Вход</a>
+    </div>
+  </body>
+</html>

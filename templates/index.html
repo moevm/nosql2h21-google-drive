@@ -5,15 +5,11 @@
   </head>
   <body>
     <h1>Index</h1>
-    {% if session_id is not none %}
     <p>Session ID: <code>{{ session_id }}</code></p>
     <p>User name: <em>{{ user["name"] }}</em></p>
-    <p>User email: <code>{{ user["email"] }}</code></p>
-    {% else %}
-    <p>No session</p>
-    {% endif %}
+    <p>Files collection size: {{ nfiles }}</p>
     <ul>
-      {% for path in ["/login", "/main", "/whoami", "/logout"] %}
+      {% for path in ["/login", "/whoami", "/reload", "/get", "/logout"] %}
       <li><a href="{{ path }}"><code>{{ path }}</code></a></li>
       {% endfor %}
     </ul>
