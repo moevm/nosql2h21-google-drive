@@ -29,8 +29,8 @@ from math import trunc
 MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 
-# MONGO_DBNAME = 'gdrivesorter'
-MONGO_DBNAME = 'fetch-files'
+MONGO_DBNAME = 'gdrivesorter'
+# MONGO_DBNAME = 'fetch-files'
 
 
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
@@ -255,13 +255,27 @@ async def _(req):
     # получение файлов по id
     files = await childrenFiles(db, user['_id'], file_id)
     if files:
+        dirs = files['upper_dirs']
         files = files['children']
         for i in files:
             i['file_id'] = trunc(i['file_id'])
+            i['mtime'] = i['mtime'].strftime("%Y-%m-%d")
+            if not i['size']:
+                i['size'] = '-'
+            if i['owner']['name'] == user['name']:
+                i['owner']['name'] = 'я'
+
+        # print(type(files[0]['mtime']))
+        # print(files[0]['mtime'])
+        # print(files[0]['mtime'].strftime("%Y-%m-%d"))
+
+
 
     return {
         'name': user['name'],
-        'files': files
+        'files': files,
+        'dirs': dirs,
+        'len_dirs': len(dirs)
     }
 
 @routes.get('/dologin')
@@ -298,37 +312,37 @@ async def logout_route(req):
 
 routes.post('/logout')(logout_route)
 
-@routes.get('/whoami')
-@aiohttp_jinja2.template('whoami.html')
-async def _(req):
-    async with aiohttp.ClientSession() as session:
-        user = await user_info(req)
-        client = await gaggle_client_for_user(req, user, session)
-        resp = await client.people('v1').people.get(
-            resourceName='people/me',
-            personFields='names,emailAddresses',
-        )
-        if not resp.ok:
-            resp.content.set_exception(None)
-            errinfo = resp.content.read_nowait().decode()
-            raise aioweb.HTTPInternalServerError(
-                text=(f'API server returned status {resp.status} {resp.reason}'
-                      + errinfo),
-            )
-
-        j = await resp.json()
-
-    return {
-        'resource_name': j['resourceName'],
-        'names': [
-            n['displayName']
-            for n in j['names']
-        ],
-        'emails': [
-            e['value']
-            for e in j['emailAddresses']
-        ],
-    }
+# @routes.get('/whoami')
+# @aiohttp_jinja2.template('whoami.html')
+# async def _(req):
+#     async with aiohttp.ClientSession() as session:
+#         user = await user_info(req)
+#         client = await gaggle_client_for_user(req, user, session)
+#         resp = await client.people('v1').people.get(
+#             resourceName='people/me',
+#             personFields='names,emailAddresses',
+#         )
+#         if not resp.ok:
+#             resp.content.set_exception(None)
+#             errinfo = resp.content.read_nowait().decode()
+#             raise aioweb.HTTPInternalServerError(
+#                 text=(f'API server returned status {resp.status} {resp.reason}'
+#                       + errinfo),
+#             )
+#
+#         j = await resp.json()
+#
+#     return {
+#         'resource_name': j['resourceName'],
+#         'names': [
+#             n['displayName']
+#             for n in j['names']
+#         ],
+#         'emails': [
+#             e['value']
+#             for e in j['emailAddresses']
+#         ],
+#     }
 
 
 class PaginatedRequestError:

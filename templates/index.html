@@ -9,7 +9,7 @@
     <p>User name: <em>{{ user["name"] }}</em></p>
     <p>Files collection size: {{ nfiles }}</p>
     <ul>
-      {% for path in ["/login", "/whoami", "/reload", "/get", "/logout"] %}
+      {% for path in ["/login", "/main", "/reload", "/get", "/logout"] %}
       <li><a href="{{ path }}"><code>{{ path }}</code></a></li>
       {% endfor %}
     </ul>

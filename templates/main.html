@@ -94,17 +94,44 @@
           </div>
         </div>
         <div class="main">
+          <table>
+            {% for d in dirs %}
+            <td><a href="/main?id={{ d['id'] }}"><code>{{ d['name'] }}</code></a></td>
+            {% endfor %}
+            {% if len_dirs == 0%}
+            <td><a href="/main?id=0"><code>Мой диск</code></a></td>
+            {% endif %}
+          </table>
           {% if files %}
-          <ul>
+          <table>
+            <tr>
+              <th><input type="checkbox" class="files"></th>
+              <th>Имя</th>
+              <th>Размер</th>
+              <th>Дата изм.</th>
+              <th>Владелец</th>
+            </tr>
           {% for file in files %}
             {% if file['type']==2 %}
-            <li><a href="/main?id={{ file['file_id'] }}"><code>{{ file['name'] }}</code></a></li>
+            <tr>
+              <td><input type="checkbox" class="files"></td>
+              <td><a href="/main?id={{ file['file_id'] }}"><code>{{ file['name'] }}</code></a></td>
+              <td>{{ file['size'] }}</td>
+              <td>{{ file['mtime'] }}</td>
+              <td>{{ file['owner']['name'] }}</td>
+            </tr>
             {% endif %}
             {% if file['type']!=2 %}
-            <li>{{ file['name'] }}</li>
+            <tr>
+              <td><input type="checkbox" class="files"></td>
+              <td>{{ file['name'] }}</td>
+              <td>{{ file['size'] }}</td>
+              <td>{{ file['mtime'] }}</td>
+              <td>{{ file['owner']['name'] }}</td>
+            </tr>
             {% endif %}
           {% endfor %}
-          </ul>
+          </table>
           {% endif %}
         </div>
       </div>
