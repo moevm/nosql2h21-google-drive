@@ -51,6 +51,14 @@ def minjson(s):
     return json.dumps(json.loads(s))
 
 
+# Return files collection name for user
+# If work=True, returns tmp collection name for updates
+def make_files_collname(user, work=False):
+    prefix = 'tmp_files' if work else 'files'
+    uid = user['_id']
+    return f"{prefix}_{uid}"
+
+
 async def query_oauth_authorize(req, scopes, dest_uri=None):
     sec = req.app['client_secret_json']['web']
     db = req.app['db']
@@ -214,10 +222,14 @@ async def _(req):
     # TODO: redirect to root dir page
 
     user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+    nfiles = await coll.count_documents({})
+
     return {
         'title': "Index",
         'session_id': sid,
         'user': user,
+        'nfiles': nfiles,
     }
 
 
@@ -515,11 +527,11 @@ async def recreate_files_collection(req, user):
         }
 
     db = req.app['db']
-    collname = f"files_{user['_id']}"
+    collname = make_files_collname(user)
 
-    new_collname = f"tmpfiles_{user['_id']}"
-    coll = db[new_collname]
-    await coll.delete_many({})
+    new_collname = make_files_collname(user, True)
+    new_coll = db[new_collname]
+    await new_coll.delete_many({})
 
     objs = [
         {
@@ -532,10 +544,10 @@ async def recreate_files_collection(req, user):
     handle_references(objs)
     handle_upper_dirs(objs)
 
-    await coll.insert_many(objs)
+    await new_coll.insert_many(objs)
 
     await db.drop_collection(collname)
-    await coll.rename(collname)
+    await new_coll.rename(collname)
 
 
 @routes.get('/reload')
@@ -550,7 +562,7 @@ async def _(req):
 async def _(req):
     user = await user_info(req)
     fid = int(req.query.getone('id', 0))
-    collname = f"files_{user['_id']}"
+    collname = make_files_collname(user)
 
     class DatetimeJSONEncoder(json.JSONEncoder):
         def default(self, o):

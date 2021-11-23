@@ -7,6 +7,7 @@
     <h1>Index</h1>
     <p>Session ID: <code>{{ session_id }}</code></p>
     <p>User name: <em>{{ user["name"] }}</em></p>
+    <p>Files collection size: {{ nfiles }}</p>
     <ul>
       {% for path in ["/login", "/whoami", "/reload", "/get", "/logout"] %}
       <li><a href="{{ path }}"><code>{{ path }}</code></a></li>
