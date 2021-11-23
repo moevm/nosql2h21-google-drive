@@ -316,21 +316,6 @@ async def request_with_pagination(
     return res
 
 
-@routes.get('/listdrives')
-@aiohttp_jinja2.template('drives.html')
-async def _(req):
-    async with aiohttp.ClientSession() as session:
-        user = await user_info(req)
-        client = await gaggle_client_for_user(req, user, session)
-
-        drives = await request_with_pagination(
-            client.drive('v3').drives.list, {}, 'drives')
-
-    return {
-        'drives': drives,
-    }
-
-
 def filter_gdrive_files(files):
     root_children = []
     root_ids = set()
@@ -375,36 +360,6 @@ def filter_gdrive_files(files):
         },
         *files_filtered,
     ]
-
-
-@routes.get('/listfiles')
-@aiohttp_jinja2.template('files.html')
-async def _(req):
-    n_files = int(n) if (n := req.query.get('n')) else 10000
-    do_filter = not bool(req.query.get('nofilter'))
-
-    async with aiohttp.ClientSession() as session:
-        user = await user_info(req)
-        client = await gaggle_client_for_user(req, user, session)
-
-        greq = {
-            'corpora': 'user',
-            'spaces': 'drive',
-            'fields': 'files(id,name,parents,mimeType,shared,sharedWithMeTime),nextPageToken',
-        }
-
-        files = await request_with_pagination(
-            client.drive('v3').files.list, greq, 'files')
-
-    if do_filter:
-        files = filter_gdrive_files(files)
-
-    return {
-        'files': [
-            json.dumps(f, indent=2, ensure_ascii=False)
-            for f in files
-        ],
-    }
 
 
 class FileType(IntEnum):

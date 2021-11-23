@@ -7,9 +7,8 @@
     <h1>Index</h1>
     <p>Session ID: <code>{{ session_id }}</code></p>
     <p>User name: <em>{{ user["name"] }}</em></p>
-    <p>User email: <code>{{ user["email"] }}</code></p>
     <ul>
-      {% for path in ["/login", "/whoami", "/reload", "/get", "/listdrives", "/listfiles", "/logout"] %}
+      {% for path in ["/login", "/whoami", "/reload", "/get", "/logout"] %}
       <li><a href="{{ path }}"><code>{{ path }}</code></a></li>
       {% endfor %}
     </ul>
