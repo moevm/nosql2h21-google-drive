@@ -6,6 +6,7 @@ import uuid
 import asyncio
 import queue
 import datetime
+from enum import IntEnum, auto
 
 from multidict import CIMultiDict
 
@@ -27,6 +28,9 @@ MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 
 MONGO_DBNAME = 'gdrivesorter'
+
+
+DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 
 
 def hostport(url):
@@ -366,6 +370,181 @@ async def _(req):
             for f in files
         ],
     }
+
+
+class FileType(IntEnum):
+    REGULAR = auto()
+    DIRECTORY = auto()
+    GOOGLE_WORKSPACE = auto()
+    UNKNOWN = auto()
+
+def mime_to_file_type(mime):
+    if mime == 'application/vnd.google-apps.folder':
+        return FileType.DIRECTORY
+    elif mime in ('application/vnd.google-apps.drive-sdk',
+                  'application/vnd.google-apps.shortcut'):
+        return FileType.UNKNOWN
+    elif mime.startswith('application/vnd.google-apps.'):
+        return FileType.GOOGLE_WORKSPACE
+    else:
+        return FileType.REGULAR
+
+class AccessMode(IntEnum):
+    RO = auto()
+    COMMENT = auto()
+    RW = auto()
+
+def role_to_access_mode(role):
+    if role == 'reader':
+        return AccessMode.RO
+    elif role == 'commenter':
+        return AccessMode.COMMENT
+    else:
+        return AccessMode.RW
+
+def perm_to_name_email(perm):
+    return {
+        'name': perm['displayName'],
+        'email': perm.get('emailAddress'),
+    }
+
+def file_from_gdrive(f):
+    anyone_perm = None
+    owner_perm = None
+    other_perms = []
+
+    for perm in f['permissions']:
+        if perm['type'] == 'anyone':
+            assert anyone_perm is None
+            anyone_perm = perm
+        elif perm['role'] == 'owner':
+            assert owner_perm is None
+            owner_perm = perm
+        else:
+            # Note: non-user permissions are also saved
+            other_perms.append(perm)
+
+    return {
+        'google_id': f['id'],
+        'name': f['name'],
+        'type': mime_to_file_type(f['mimeType']),
+        'mime': f['mimeType'],
+        'owner': (None if owner_perm is None
+                  else perm_to_name_email(owner_perm)),
+        'shared_with': [
+            {
+                **perm_to_name_email(perm),
+                'access': role_to_access_mode(perm['role']),
+            }
+            for perm in other_perms
+        ],
+        'size': f.get('size', None),
+        'shared_via_link': (None if anyone_perm is None
+                            else role_to_access_mode(anyone_perm['role'])),
+        'mtime': datetime.datetime.strptime(f['modifiedTime'], DATETIME_FORMAT),
+        'parent': ps[0] if (ps := f.get('parents')) else None,
+        'children': f.get('children'),
+        'upper_dirs': None,
+    }
+
+
+def child_record(f):
+    return {
+        'file_id': f['_id'],
+        **{
+            k: f[k]
+           for k in ['name', 'size', 'owner', 'shared_with', 'mtime']
+        }
+    }
+
+def handle_references(files):
+    ftab = {f['google_id']: f for f in files}
+
+    for f in files:
+        if p := f['parent']:
+            f['parent'] = ftab[p]['_id']
+        if ch := f['children']:
+            f['children'] = [
+                child_record(ftab[ch])
+                for ch in ch
+            ]
+
+
+def handle_upper_dirs(files):
+    files[0]['upper_dirs'] = []
+
+    s = [0]
+    while s:
+        s, t = [], s
+        for x in t:
+            rec = files[x]
+            ud = [
+                *rec['upper_dirs'],
+                {
+                    'id': x,
+                    'name': rec['name'],
+                },
+            ]
+            if ch := rec['children']:
+                for c in ch:
+                    cid = c['file_id']
+                    files[cid]['upper_dirs'] = ud
+                    s.append(cid)
+
+
+async def recreate_files_collection(req, user):
+    async with aiohttp.ClientSession() as session:
+        client = await gaggle_client_for_user(req, user, session)
+
+        props = ",".join([
+            "id", "name", "parents", "mimeType",
+            "permissions",
+            "size", "modifiedTime",
+        ])
+        greq = {
+            'corpora': 'user',
+            'spaces': 'drive',
+            'fields': f'files({props}),nextPageToken',
+        }
+
+        files_src = await request_with_pagination(
+            client.drive('v3').files.list, greq, 'files')
+
+        files = filter_gdrive_files(files_src)
+
+        root = files[0]
+        resp = await client.drive('v3').files.get(
+            fileId=root['id'],
+            fields=props,
+        )
+        assert resp.ok
+        files[0] = {
+            **(await resp.json()),
+            'children': root['children'],
+        }
+
+    db = req.app['db']
+    collname = f"files_{user['_id']}"
+
+    new_collname = f"tmpfiles_{user['_id']}"
+    coll = db[new_collname]
+    await coll.delete_many({})
+
+    objs = [
+        {
+            '_id': i,
+            **file_from_gdrive(f),
+        }
+        for i, f in enumerate(files)
+    ]
+
+    handle_references(objs)
+    handle_upper_dirs(objs)
+
+    await coll.insert_many(objs)
+
+    await coll.rename(collname)
+
 
 @routes.get('/autherror')
 async def _(req):
