@@ -124,9 +124,7 @@ async def user_info(req):
     raise await query_oauth_authorize(req, GOOGLE_API_SCOPES)
 
 
-async def user_update_access(req, user, r, new=False):
-    uid = user['_id']
-    auth_code = user['auth_code']
+async def user_update_access(req, uid, info, r, new=False):
     tok = r['access_token']
     exp = r['expires_in']
 
@@ -143,9 +141,9 @@ async def user_update_access(req, user, r, new=False):
         {'_id': uid},
         {
             '$set': {
-                'auth_code': auth_code,
                 'access_token': r['access_token'],
                 'expires_at': expdt,
+                **info
             },
         },
         upsert=new,
@@ -154,9 +152,10 @@ async def user_update_access(req, user, r, new=False):
 
 async def user_request_update_access(req, user):
     auth_code = user['auth_code']
+    userinfo = {k: v for k, v in user.items() if k != '_id'}
 
     if r := await query_oauth_access(req, auth_code):
-        user_update_access(req, user, r, new=False)
+        user_update_access(req, user['_id'], userinfo, r, new=False)
         return r['access_token']
 
     raise aioweb.HTTPInternalServerError(
@@ -303,7 +302,7 @@ async def _(req):
         ).people('v1')
         resp = await people.people.get(
             resourceName='people/me',
-            personFields='metadata',
+            personFields='metadata,names,emailAddresses',
         )
         if not resp.ok:
             resp.content.set_exception(None)
@@ -315,11 +314,13 @@ async def _(req):
 
         j = await resp.json()
         uid = j['metadata']['sources'][0]['id']
+        info = {
+            'auth_code': auth_code,
+            'name': j['names'][0]['displayName'],
+            'email': j['emailAddresses'][0]['value'],
+        }
 
-    await user_update_access(req, {
-        '_id': uid,
-        'auth_code': auth_code,
-    }, r, new=True)
+    await user_update_access(req, uid, info, r, new=True)
 
     # why generate another UUID when we can just reuse the old one?
     sid = state
