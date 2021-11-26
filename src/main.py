@@ -250,7 +250,7 @@ async def _(req):
         raise aioweb.HTTPFound(location='/login')
 
     file_id = req.rel_url.query.get("id")
-    if file_id == None:
+    if file_id is None:
         file_id = 0
 
     db = req.app['db']
