@@ -246,12 +246,14 @@ async def _(req):
     sid = req.cookies.get('session_id', None)
     user = (await user_info(req)) if sid else None
 
+    if sid is None:
+        raise aioweb.HTTPFound(location='/login')
+
     file_id = req.rel_url.query.get("id")
     if file_id == None:
         file_id = 0
 
     db = req.app['db']
-    # получение файлов по id
     files = await childrenFiles(db, user['_id'], file_id)
     if files:
         dirs = files['upper_dirs']
@@ -641,11 +643,13 @@ async def _(req):
     await db.sessions.update_one(
         {'_id': sid},
         {
-            '$set': {'user_id': uid},
+            '$set': {'user_id': uid, 'createdAt': datetime.datetime.utcnow()},
             '$unset': {'path': ""},
         },
         upsert=True,
     )
+
+    await db.sessions.create_index('createdAt', expireAfterSeconds=3600)
 
     # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
 
