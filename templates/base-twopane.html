@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    {% block head %}
+      <title>main</title>
+      <style>
+        hr{
+          width: 80%;
+          border-top: 0;
+          border-bottom: 1px gray solid;
+        }
+
+        #all{
+          display: flex;
+          flex-direction: row;
+        }
+
+        #left{
+          border-right: 1px gray solid;
+          min-width: 20em;
+        }
+
+        #right{
+          margin-left: 1em;
+        }
+
+        {% block style %}{% endblock style %}
+      </style>
+    {% endblock head %}
+  </head>
+  <body>
+    <div id="all">
+      <div id="left">
+        {% block leftpane %}{% endblock leftpane %}
+      </div>
+      <div id="right">
+        {% block toprow %}
+          <div id="topButtons">
+            <button>Скачать</button>
+            <button>Переместить</button>
+            <button>Удалить</button>
+            <button>Выделить все</button>
+            <button>Обновить</button>
+          </div>
+        {% endblock toprow %}
+        <hr/>
+        <div id="main">
+          {% block dirline %}
+            <div id="directoryLine">
+              {% for d in dirs %}
+                <span class="directory">
+                  <a href="/main?id={{ d['id'] }}"><code>{{ d['name'] }}</code></a>
+                </span>
+              {% endfor %}
+            </div>
+          {% endblock dirline %}
+          <table>
+            <tr>
+              <th><input type="checkbox" class="files"></th>
+              <th>Имя</th>
+              <th>Размер</th>
+              <th>Дата изм.</th>
+              <th>Владелец</th>
+            </tr>
+            {% block filetab %}{% endblock filetab %}
+          </table>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
