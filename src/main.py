@@ -649,8 +649,6 @@ async def _(req):
         upsert=True,
     )
 
-    await db.sessions.create_index('createdAt', expireAfterSeconds=3600)
-
     # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
 
     # Note: sid is a UUID string, so its character set is [0-9a-f-].
@@ -671,6 +669,14 @@ async def _(req):
     )
 
 
+async def initialize_db(db):
+    colls = await db.list_collection_names()
+
+    if 'sessions' not in colls:
+        await db.create_collection('sessions')
+        await db.sessions.create_index('createdAt', expireAfterSeconds=3600)
+
+
 async def make_app(argv):
     app = aioweb.Application()
     app.add_routes(routes)
@@ -680,6 +686,8 @@ async def make_app(argv):
 
     app['dbclient'] = aiomotor.AsyncIOMotorClient(MONGO_HOST, MONGO_PORT)
     app['db'] = app['dbclient'][MONGO_DBNAME]
+
+    await initialize_db(app['db'])
 
     aiohttp_jinja2.setup(
         app,
