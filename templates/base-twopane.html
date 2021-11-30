@@ -24,6 +24,9 @@
           margin-left: 1em;
         }
 
+        #leftUserInfo{
+          text-align: center;
+        }
         {% block style %}{% endblock style %}
       </style>
     {% endblock head %}
@@ -31,6 +34,13 @@
   <body>
     <div id="all">
       <div id="left">
+        <div id="leftUserInfo">
+          <form id="logout-form" action="/logout">
+            <span>{{ name }}</span>
+            <button type="submit">Выйти</button>
+          </form>
+        </div>
+        <hr/>
         {% block leftpane %}{% endblock leftpane %}
       </div>
       <div id="right">
