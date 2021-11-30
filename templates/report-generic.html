@@ -1,0 +1,23 @@
+{% extends "base-twopane.html" %}
+{% block style %}
+  #leftNavLine{
+    display: flex;
+    flex-direction: row;
+  }
+
+  #leftNavLine > *{
+    display: inline-block;
+  }
+{% endblock style %}
+{% block leftpane %}
+  <label>
+    <input type="checkbox" id="nosubdir-checkbox">
+    Без подкаталогов
+  </label>
+  <div id="leftNavLine">
+    <a class="navButton" href="{{ backlink }}">Назад</a>
+    <form id="retryForm">
+      <input type="submit" class="navButton" formaction="{{ retrylink }}">
+    </form>
+  </div>
+{% endblock leftpane %}
