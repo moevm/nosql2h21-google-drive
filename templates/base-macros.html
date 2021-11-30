@@ -1,0 +1,15 @@
+{% macro file_entry(file) %}
+  <tr>
+    <td><input type="checkbox" class="files"></td>
+    <td>
+      {% if file['type']==2 %}
+        <a href="/main?id={{ file['file_id'] }}"><code>{{ file['name'] }}</code></a>
+      {% else %}
+        {{ file['name'] }}
+      {% endif %}
+    </td>
+    <td>{{ file['size'] }}</td>
+    <td>{{ file['mtime'] }}</td>
+    <td>{{ file['owner']['name'] }}</td>
+  </tr>
+{% endmacro %}

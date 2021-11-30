@@ -1,17 +1,6 @@
 {% extends "base-twopane.html" %}
-{% block style %}
-  #leftUserInfo{
-    text-align: center;
-  }
-{% endblock style %}
+{% import "base-macros.html" %}
 {% block leftpane %}
-  <div id="leftUserInfo">
-    <form id="logout-form" action="/logout">
-      <span>{{ name }}</span>
-      <button type="submit">Выйти</button>
-    </form>
-  </div>
-  <hr/>
   <label>
     <input type="checkbox" id="nosubdir-checkbox">
     Без подкаталогов
@@ -21,22 +10,7 @@
 {% endblock leftpane %}
 {% block filetab %}
   {% for file in files %}
-    {% if file['type']==2 %}
-      <tr>
-        <td><input type="checkbox" class="files"></td>
-        <td><a href="/main?id={{ file['file_id'] }}"><code>{{ file['name'] }}</code></a></td>
-        <td>{{ file['size'] }}</td>
-        <td>{{ file['mtime'] }}</td>
-        <td>{{ file['owner']['name'] }}</td>
-      </tr>
-    {% else %}
-      <tr>
-        <td><input type="checkbox" class="files"></td>
-        <td>{{ file['name'] }}</td>
-        <td>{{ file['size'] }}</td>
-        <td>{{ file['mtime'] }}</td>
-        <td>{{ file['owner']['name'] }}</td>
-      </tr>
-    {% endif %}
-  {% endfor %}
+    {{ file_entry(file) }}
+  {% endif %}
+{% endfor %}
 {% endblock filetab %}
