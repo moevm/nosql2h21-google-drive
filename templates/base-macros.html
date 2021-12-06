@@ -8,8 +8,8 @@
         {{ file['name'] }}
       {% endif %}
     </td>
-    <td>{{ file['size'] }}</td>
-    <td>{{ file['mtime'] }}</td>
+    <td>{{ file['size'] or '-' }}</td>
+    <td>{{ file['mtime'].strftime('%Y-%m-%d') }}</td>
     <td>{{ file['owner']['name'] }}</td>
   </tr>
 {% endmacro %}

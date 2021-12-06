@@ -259,14 +259,12 @@ async def _(req):
     files = file_rec['children']
     for i in files:
         i['file_id'] = trunc(i['file_id'])
-        i['mtime'] = i['mtime'].strftime("%Y-%m-%d")
-        if not i['size']:
-            i['size'] = '-'
         if i['owner']['name'] == user['name']:
             i['owner']['name'] = 'я'
 
     return {
         'name': user['name'],
+        'nosubdir': req.url.query.getone('nosubdir', None) == 'on',
         'files': files,
         'dirs': dirs,
     }
@@ -667,8 +665,8 @@ async def _(req):
     )
 
 
-def make_subrecord_query(file_id, isrec):
-    if isrec:
+def make_subrecord_query(file_id, nosubdir):
+    if not nosubdir:
         return {'upper_dirs.id': file_id}
     else:
         return {'parent': file_id}
@@ -680,19 +678,19 @@ async def _(req):
     user = await user_info(req)
     coll = req.app['db'][make_files_collname(user)]
 
-    isrec = req.url.query.getone('nosubdir', None) != 'on'
-    file_id = int(req.url.query.getone("id"))
-    file_rec = await coll.file_one({'_id': file_id})
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
 
-    files = await coll.find({**make_subrecord_query(file_id),
+    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
                              'shared_via_link': {"$ne": None}}).to_list(None)
 
     return {
         'name': user['name'],
-        'files': files,
-        'dirs': top_dirs(file_rec),
-        'retrylink': URL.build(path=req.url.path, query={'id': file_id}),
-        'backlink': '/main',
+        'nosubdir': nosubdir,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
     }
 
 

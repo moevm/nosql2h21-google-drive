@@ -1,13 +1,43 @@
 {% extends "base-twopane.html" %}
 {% import "base-macros.html" as base %}
-{% block leftpane %}
-  <label>
-    <input type="checkbox" id="nosubdir">
-    Без подкаталогов
-  </label>
-  <div id="leftButtons">
+{% block style %}
+  details > summary{
+    cursor: default;
+  }
 
-  </div>
+  details > form {
+    margin-left: 1em;
+  }
+{% endblock style %}
+{% block leftpane %}
+  <form id="leftButtons">
+    <label>
+      <input type="checkbox" id="nosubdir-checkbox"
+             name="nosubdir" {% if nosubdir %} checked {% endif %}>
+      Без подкаталогов
+    </label>
+    <div>
+      <input type="hidden" name="id" value="{{ dirs[-1]['id'] }}">
+      <details id="buttonGroupReports">
+        <summary>Отчёты</summary>
+        <div id="reportFilesSharedViaLink">
+          <div>Все файлы, к которым есть доступ по ссылке:</div>
+          <input type="submit"
+                 formaction="/query/shared-via-link"
+                 value="Показать">
+        </div>
+      </details>
+      <details id="buttonGroupSearches">
+        <summary>Поиск</summary>
+      </details>
+      <details id="buttonGroupGrouping">
+        <summary>Группировка</summary>
+      </details>
+      <details id="buttonGroupImportExport">
+        <summary>Импорт/Экспорт</summary>
+      </details>
+    </div>
+  </form>
 {% endblock leftpane %}
 {% block filetab %}
   {% for file in files %}

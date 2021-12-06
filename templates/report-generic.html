@@ -11,13 +11,16 @@
   }
 {% endblock style %}
 {% block leftpane %}
-  <form id="retryForm" action="{{ retrylink }}">
+  <form id="retryForm" action="{{ path }}">
     <label>
-      <input type="checkbox" id="nosubdir">
+      <input type="checkbox" id="nosubdir-checkbox"
+             name="nosubdir" {% if nosubdir %} checked {% endif %}>
       Без подкаталогов
     </label>
+    <input type="hidden" name="id" value="{{ dirs[-1]['id'] }}">
     <div id="leftNavLine">
-      <a class="navButton" href="{{ backlink }}">Назад</a>
+      <input type="submit" class="navButton" value="Назад"
+             formaction="/main?id={{ dirs[-1]['id'] }}">
       <input type="submit" class="navButton" value="Повторить">
     </div>
   </form>
