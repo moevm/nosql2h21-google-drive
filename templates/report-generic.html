@@ -1,4 +1,5 @@
 {% extends "base-twopane.html" %}
+{% import "base-macros.html" as base %}
 {% block style %}
   #leftNavLine{
     display: flex;
@@ -10,14 +11,19 @@
   }
 {% endblock style %}
 {% block leftpane %}
-  <label>
-    <input type="checkbox" id="nosubdir-checkbox">
-    Без подкаталогов
-  </label>
-  <div id="leftNavLine">
-    <a class="navButton" href="{{ backlink }}">Назад</a>
-    <form id="retryForm">
-      <input type="submit" class="navButton" formaction="{{ retrylink }}">
-    </form>
-  </div>
+  <form id="retryForm" action="{{ retrylink }}">
+    <label>
+      <input type="checkbox" id="nosubdir">
+      Без подкаталогов
+    </label>
+    <div id="leftNavLine">
+      <a class="navButton" href="{{ backlink }}">Назад</a>
+      <input type="submit" class="navButton" value="Повторить">
+    </div>
+  </form>
 {% endblock leftpane %}
+{% block filetab %}
+  {% for file in files %}
+    {{ base.file_entry(file) }}
+  {% endfor %}
+{% endblock filetab %}

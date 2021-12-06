@@ -235,37 +235,35 @@ async def _(req):
     }
 
 
-async def childrenFiles(db, user_id, file_id):
-    if files := await db[f'files_{user_id}'].find_one({'_id': int(file_id)}):
-        return files
+def top_dirs(file_rec):
+    return [
+        *file_rec['upper_dirs'],
+        {
+            'id': file_rec['_id'],
+            'name': file_rec['name'],
+        },
+    ]
 
 
 @routes.get('/main')
 @aiohttp_jinja2.template('main.html')
 async def _(req):
-    sid = req.cookies.get('session_id', None)
-    user = (await user_info(req)) if sid else None
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
 
-    if sid is None:
-        raise aioweb.HTTPFound(location='/login')
+    file_id = int(req.rel_url.query.getone("id", 0))
 
-    file_id = req.rel_url.query.get("id")
-    if file_id is None:
-        file_id = 0
+    file_rec = await coll.find_one({'_id': file_id})
+    dirs = top_dirs(file_rec)
 
-    db = req.app['db']
-    files = await childrenFiles(db, user['_id'], file_id)
-    if files:
-        dirs = files['upper_dirs']
-        dirs.append({'id':files['_id'], 'name':files['name']})
-        files = files['children']
-        for i in files:
-            i['file_id'] = trunc(i['file_id'])
-            i['mtime'] = i['mtime'].strftime("%Y-%m-%d")
-            if not i['size']:
-                i['size'] = '-'
-            if i['owner']['name'] == user['name']:
-                i['owner']['name'] = 'я'
+    files = file_rec['children']
+    for i in files:
+        i['file_id'] = trunc(i['file_id'])
+        i['mtime'] = i['mtime'].strftime("%Y-%m-%d")
+        if not i['size']:
+            i['size'] = '-'
+        if i['owner']['name'] == user['name']:
+            i['owner']['name'] = 'я'
 
     return {
         'name': user['name'],
@@ -667,6 +665,35 @@ async def _(req):
         location=original_url,
         headers=cookie_headers,
     )
+
+
+def make_subrecord_query(file_id, isrec):
+    if isrec:
+        return {'upper_dirs.id': file_id}
+    else:
+        return {'parent': file_id}
+
+
+@routes.get('/query/shared-via-link')
+@aiohttp_jinja2.template('report-generic.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    isrec = req.url.query.getone('nosubdir', None) != 'on'
+    file_id = int(req.url.query.getone("id"))
+    file_rec = await coll.file_one({'_id': file_id})
+
+    files = await coll.find({**make_subrecord_query(file_id),
+                             'shared_via_link': {"$ne": None}}).to_list(None)
+
+    return {
+        'name': user['name'],
+        'files': files,
+        'dirs': top_dirs(file_rec),
+        'retrylink': URL.build(path=req.url.path, query={'id': file_id}),
+        'backlink': '/main',
+    }
 
 
 async def initialize_db(db):

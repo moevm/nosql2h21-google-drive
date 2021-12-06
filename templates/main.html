@@ -1,16 +1,16 @@
 {% extends "base-twopane.html" %}
-{% import "base-macros.html" %}
+{% import "base-macros.html" as base %}
 {% block leftpane %}
   <label>
-    <input type="checkbox" id="nosubdir-checkbox">
+    <input type="checkbox" id="nosubdir">
     Без подкаталогов
   </label>
   <div id="leftButtons">
+
   </div>
 {% endblock leftpane %}
 {% block filetab %}
   {% for file in files %}
-    {{ file_entry(file) }}
-  {% endif %}
-{% endfor %}
+    {{ base.file_entry(file) }}
+  {% endfor %}
 {% endblock filetab %}
