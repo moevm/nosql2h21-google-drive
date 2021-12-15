@@ -3,6 +3,7 @@
 import sys
 import json
 import uuid
+import fnmatch
 import asyncio
 import queue
 import datetime
@@ -197,9 +198,11 @@ def gaggle_client_for_token(req, tok, session):
         client_secret=sec['client_secret'],
     )
 
+
 async def gaggle_client_for_user(req, user, session):
     tok = await user_access(req, user)
     return gaggle_client_for_token(req, tok, session)
+
 
 async def do_logout(db, sid):
     # Max-Age=0 expires the cookie immediately
@@ -259,8 +262,8 @@ async def _(req):
     files = file_rec['children']
     for i in files:
         i['file_id'] = trunc(i['file_id'])
-        if i['owner']['name'] == user['name']:
-            i['owner']['name'] = 'я'
+        # if i['owner']['name'] == user['name']:
+        #     i['owner']['name'] = 'я'
 
     return {
         'name': user['name'],
@@ -307,6 +310,7 @@ routes.post('/logout')(logout_route)
 class PaginatedRequestError:
     def __init__(self, resp):
         self.resp = resp
+
 
 async def request_with_pagination(
         method, req_dict, data_key,
@@ -383,6 +387,7 @@ class FileType(IntEnum):
     GOOGLE_WORKSPACE = auto()
     UNKNOWN = auto()
 
+
 def mime_to_file_type(mime):
     if mime == 'application/vnd.google-apps.folder':
         return FileType.DIRECTORY
@@ -394,10 +399,12 @@ def mime_to_file_type(mime):
     else:
         return FileType.REGULAR
 
+
 class AccessMode(IntEnum):
     RO = auto()
     COMMENT = auto()
     RW = auto()
+
 
 def role_to_access_mode(role):
     if role == 'reader':
@@ -407,11 +414,13 @@ def role_to_access_mode(role):
     else:
         return AccessMode.RW
 
+
 def perm_to_name_email(perm):
     return {
         'name': perm['displayName'],
         'email': perm.get('emailAddress'),
     }
+
 
 def file_from_gdrive(f):
     anyone_perm = None
@@ -462,6 +471,7 @@ def child_record(f):
                      'size', 'owner', 'shared_with', 'mtime']
         }
     }
+
 
 def handle_references(files):
     ftab = {f['google_id']: f for f in files}
@@ -663,6 +673,78 @@ async def _(req):
         location=original_url,
         headers=cookie_headers,
     )
+
+
+@routes.get('/query/search-by-user')
+@aiohttp_jinja2.template('search-by-user.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    owner = req.url.query.getone('owner', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    searchUser = req.url.query.getone("userName", None)
+
+    if owner:
+        files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+            "$or": [
+                {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
+                {"owner.name": {"$regex": fnmatch.translate(searchUser)}},
+            ]
+        }).to_list(None)
+    else:
+        files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+            "$or": [
+                {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
+                {"owner.name": {"$regex": fnmatch.translate(searchUser)}},
+                {"shared_with": {"$elemMatch": {
+                    "$or": [
+                        {"email": {"$regex": fnmatch.translate(searchUser)}},
+                        {"name": {"$regex": fnmatch.translate(searchUser)}}
+                    ]
+                }
+                }
+                }
+            ]
+        }).to_list(None)
+
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'owner': owner,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+        'user_name': searchUser
+
+    }
+
+
+@routes.get('/query/search-by-name')
+@aiohttp_jinja2.template('search-by-name.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    regex = req.url.query.getone("fileName", None)
+
+    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                             'name': {"$regex": fnmatch.translate(regex)}}).to_list(None)
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+        'file_name': regex
+    }
 
 
 def make_subrecord_query(file_id, nosubdir):

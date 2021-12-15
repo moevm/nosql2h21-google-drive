@@ -1,0 +1,25 @@
+{% extends "base-twopane.html" %}
+{% import "base-macros.html" as base %}
+{% block leftpane %}
+  <form id="retryForm" action="{{ path }}">
+    <label>
+      <input type="checkbox" id="nosubdir-checkbox"
+             name="nosubdir" {% if nosubdir %} checked {% endif %}>
+      Без подкаталогов
+    </label>
+    <input type="hidden" name="id" value="{{ dirs[-1]['id'] }}">
+    <div id="leftNavLine">
+      <label>Поиск по имени файла:</label>
+      <input type="text" name="fileName" value={{file_name}}>
+      <br>
+      <input type="submit" class="navButton" value="Назад"
+             formaction="/main?id={{ dirs[-1]['id'] }}">
+      <input type="submit" class="navButton" value="Повторить">
+    </div>
+  </form>
+{% endblock leftpane %}
+{% block filetab %}
+  {% for file in files %}
+    {{ base.file_entry(file) }}
+  {% endfor %}
+{% endblock filetab %}

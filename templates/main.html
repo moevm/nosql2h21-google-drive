@@ -24,11 +24,34 @@
           <div>Все файлы, к которым есть доступ по ссылке:</div>
           <input type="submit"
                  formaction="/query/shared-via-link"
-                 value="Показать">
+                 value="Показать"
+          >
         </div>
       </details>
       <details id="buttonGroupSearches">
         <summary>Поиск</summary>
+        <div id="searchByName">
+          <div>Поиск по имени файла:</div>
+          <input type="text" id="fileName" name="fileName">
+          <input type="submit"
+                 formaction="/query/search-by-name"
+                 value="Показать"
+          >
+        </div>
+        <br>
+        <div id="searchByUser">
+          <div>Поиск по пользователю:</div>
+          <label>
+            <input type="checkbox" id="owner-checkbox" name="owner" {% if owner %} checked {% endif %}>
+            Только владельцы
+          </label>
+          <br>
+          <input type="text" id="userName" name="userName">
+          <input type="submit"
+                 formaction="/query/search-by-user"
+                 value="Показать"
+          >
+        </div>
       </details>
       <details id="buttonGroupGrouping">
         <summary>Группировка</summary>
