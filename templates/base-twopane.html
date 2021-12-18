@@ -46,11 +46,13 @@
       <div id="right">
         {% block toprow %}
           <div id="topButtons">
-            <button>Скачать</button>
-            <button>Переместить</button>
-            <button>Удалить</button>
-            <button>Выделить все</button>
-            <button>Обновить</button>
+            <form id="top-buttons-form">
+              <button>Скачать</button>
+              <button>Переместить</button>
+              <button>Удалить</button>
+              <button>Выделить все</button>
+              <button type="submit" formaction="/reload">Обновить</button>
+            </form>
           </div>
         {% endblock toprow %}
         <hr/>

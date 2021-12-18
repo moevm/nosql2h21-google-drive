@@ -568,7 +568,7 @@ async def _(req):
     user = await user_info(req)
     await recreate_files_collection(req, user)
 
-    raise aioweb.HTTPFound(location='/')
+    raise aioweb.HTTPFound(location='/main')
 
 
 @routes.get('/autherror')
@@ -687,29 +687,51 @@ async def _(req):
     dir_rec = await coll.find_one({'_id': dir_id})
 
     searchUser = req.url.query.getone("userName", None)
+    print('@' in searchUser)
 
-    if owner:
-        files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
-            "$or": [
-                {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
-                {"owner.name": {"$regex": fnmatch.translate(searchUser)}},
-            ]
-        }).to_list(None)
+    if '@' in searchUser:
+        if owner:
+            files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                "$or": [
+                    {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
+                ]
+            }).to_list(None)
+        else:
+            files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                "$or": [
+                    {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
+                    {"shared_with": {"$elemMatch": {
+                        "$or": [
+                            {"email": {"$regex": fnmatch.translate(searchUser)}},
+                        ]
+                    }
+                    }
+                    }
+                ]
+            }).to_list(None)
     else:
-        files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
-            "$or": [
-                {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
-                {"owner.name": {"$regex": fnmatch.translate(searchUser)}},
-                {"shared_with": {"$elemMatch": {
-                    "$or": [
-                        {"email": {"$regex": fnmatch.translate(searchUser)}},
-                        {"name": {"$regex": fnmatch.translate(searchUser)}}
-                    ]
-                }
-                }
-                }
-            ]
-        }).to_list(None)
+        if owner:
+            files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                "$or": [
+                    {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
+                    {"owner.name": {"$regex": fnmatch.translate(searchUser)}},
+                ]
+            }).to_list(None)
+        else:
+            files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                "$or": [
+                    {"owner.email": {"$regex": fnmatch.translate(searchUser)}},
+                    {"owner.name": {"$regex": fnmatch.translate(searchUser)}},
+                    {"shared_with": {"$elemMatch": {
+                        "$or": [
+                            {"email": {"$regex": fnmatch.translate(searchUser)}},
+                            {"name": {"$regex": fnmatch.translate(searchUser)}}
+                        ]
+                    }
+                    }
+                    }
+                ]
+            }).to_list(None)
 
     return {
         'name': user['name'],
