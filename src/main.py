@@ -336,8 +336,7 @@ async def request_with_pagination(
 
 
 def filter_gdrive_files(files):
-    root_children = []
-    root_ids = set()
+    roots = {}
     ftab = {
         f['id']: (
             {**f, 'children': []}
@@ -346,18 +345,20 @@ def filter_gdrive_files(files):
         ) for f in files
     }
 
+    bad_ids = []
+
     for k, v in ftab.items():
         pars = v.get('parents')
         if pars is None:
+            bad_ids.append(k)
             continue
         par_id = pars[0]
         if p := ftab.get(par_id):
             p['children'].append(k)
         else:
-            root_children.append(k)
-            root_ids.add(par_id)
+            chs = roots.setdefault(par_id, [])
+            chs.append(k)
 
-    bad_ids = [k for k, v in ftab.items() if not v.get('parents')]
     qidx = 0
     while qidx < len(bad_ids):
         bad_ids.extend(ftab[bad_ids[qidx]].get('children', []))
@@ -368,17 +369,10 @@ def filter_gdrive_files(files):
 
     alog.debug(f'bad ids: {len(bad_ids)}, ok: {len(files_filtered)}')
 
-    if len(root_ids) != 1:
-        alog.warning(f'len(root_ids)!=1: {root_ids!r}')
+    if len(roots) != 1:
+        alog.warning(f'len(roots)!=1: {roots!r}')
 
-    return [
-        {
-            'id': (list(root_ids) or [None])[0],
-            'mimeType': 'application/vnd.google-apps.folder',
-            'children': root_children,
-        },
-        *files_filtered,
-    ]
+    return roots, files_filtered
 
 
 class FileType(IntEnum):
@@ -512,11 +506,14 @@ async def recreate_files_collection(req, user):
     async with aiohttp.ClientSession() as session:
         client = await gaggle_client_for_user(req, user, session)
 
-        props = ",".join([
+        PROPS_BASE = [
             "id", "name", "parents", "mimeType",
             "permissions",
             "size", "modifiedTime",
-        ])
+        ]
+
+        props = ",".join(PROPS_BASE)
+        props_root = ",".join([*PROPS_BASE, "ownedByMe"])
         greq = {
             'corpora': 'user',
             'spaces': 'drive',
@@ -526,18 +523,35 @@ async def recreate_files_collection(req, user):
         files_src = await request_with_pagination(
             client.drive('v3').files.list, greq, 'files')
 
-        files = filter_gdrive_files(files_src)
+        roots, files = filter_gdrive_files(files_src)
 
-        root = files[0]
-        resp = await client.drive('v3').files.get(
-            fileId=root['id'],
-            fields=props,
-        )
-        assert resp.ok
-        files[0] = {
-            **(await resp.json()),
-            'children': root['children'],
-        }
+        if len(roots) < 1:
+            alog.warning(f'no roots, len(files) = {len(files)}')
+
+        if not files and not roots:
+            alog.error('accout with empty google drive')
+            raise Exception('accout with empty google drive')
+
+        ok_roots = []
+
+        for root_id, children in roots.items():
+            resp = await client.drive('v3').files.get(
+                fileId=root_id,
+                fields=props_root,
+            )
+            assert resp.ok
+            j = await resp.json()
+            if j['ownedByMe']:
+                del j['ownedByMe']
+                ok_roots.append({
+                    **j,
+                    'children': children,
+                })
+
+        if len(ok_roots) != 1:
+            alog.warning(f"len(ok_roots) != 1: {ok_roots!r}")
+
+        files.insert(0, ok_roots[0])
 
     db = req.app['db']
     collname = make_files_collname(user)
