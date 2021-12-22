@@ -335,7 +335,7 @@ async def request_with_pagination(
     return res
 
 
-def filter_gdrive_files(files):
+def find_gdrive_roots(files):
     roots = {}
     ftab = {
         f['id']: (
@@ -345,12 +345,9 @@ def filter_gdrive_files(files):
         ) for f in files
     }
 
-    bad_ids = []
-
     for k, v in ftab.items():
         pars = v.get('parents')
         if pars is None:
-            bad_ids.append(k)
             continue
         par_id = pars[0]
         if p := ftab.get(par_id):
@@ -359,20 +356,10 @@ def filter_gdrive_files(files):
             chs = roots.setdefault(par_id, [])
             chs.append(k)
 
-    qidx = 0
-    while qidx < len(bad_ids):
-        bad_ids.extend(ftab[bad_ids[qidx]].get('children', []))
-        qidx += 1
-
-    bad_ids = set(bad_ids)
-    files_filtered = [v for k, v in ftab.items() if k not in bad_ids]
-
-    alog.debug(f'bad ids: {len(bad_ids)}, ok: {len(files_filtered)}')
-
     if len(roots) != 1:
         alog.warning(f'len(roots)!=1: {roots!r}')
 
-    return roots, files_filtered
+    return ftab, roots
 
 
 class FileType(IntEnum):
@@ -523,14 +510,14 @@ async def recreate_files_collection(req, user):
         files_src = await request_with_pagination(
             client.drive('v3').files.list, greq, 'files')
 
-        roots, files = filter_gdrive_files(files_src)
-
-        if len(roots) < 1:
-            alog.warning(f'no roots, len(files) = {len(files)}')
-
-        if not files and not roots:
+        if not files_src:
             alog.error('accout with empty google drive')
             raise Exception('accout with empty google drive')
+
+        ftab, roots = find_gdrive_roots(files_src)
+
+        if len(roots) < 1:
+            alog.warning(f'no roots, len(files_src) = {len(files_src)}')
 
         ok_roots = []
 
@@ -551,7 +538,12 @@ async def recreate_files_collection(req, user):
         if len(ok_roots) != 1:
             alog.warning(f"len(ok_roots) != 1: {ok_roots!r}")
 
-        files.insert(0, ok_roots[0])
+        reachable = [ok_roots[0]]
+        qidx = 0
+        while qidx < len(reachable):
+            chs = reachable[qidx].get('children', [])
+            reachable.extend((ftab[i] for i in chs))
+            qidx += 1
 
     db = req.app['db']
     collname = make_files_collname(user)
@@ -565,7 +557,7 @@ async def recreate_files_collection(req, user):
             '_id': i,
             **file_from_gdrive(f),
         }
-        for i, f in enumerate(files)
+        for i, f in enumerate(reachable)
     ]
 
     handle_references(objs)
