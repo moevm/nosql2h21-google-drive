@@ -30,21 +30,22 @@
                 <div id="reportFilesSharedViaLink">
                     <div>Все файлы, которыми не владеет текущий пользователь:</div>
                     <input type="submit"
-                           formaction="/query/shared-via-link"
+                           formaction="/query/another-users-files"
                            value="Показать"
                     >
                 </div>
                 <div id="reportFilesSharedViaLink">
                     <div>Все файлы, которые не принадлежат владельцу каталога:</div>
                     <input type="submit"
-                           formaction="/query/shared-via-link"
+                           formaction="/query/another-users-files-catalogue"
                            value="Показать"
                     >
                 </div>
-                <div id="reportFilesSharedViaLink">
+                <div id="reportBigFiles">
                     <div>Все файлы, большого размера:</div>
+                    <input type="number" id="fileSize" name="fileSize" value="50" min="1"> Мб
                     <input type="submit"
-                           formaction="/query/shared-via-link"
+                           formaction="/query/big-files"
                            value="Показать"
                     >
                 </div>

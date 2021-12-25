@@ -26,12 +26,10 @@ import motor.motor_asyncio as aiomotor
 
 from math import trunc
 
-
 MONGO_HOST = 'localhost'
 MONGO_PORT = 27017
 
 MONGO_DBNAME = 'gdrivesorter'
-
 
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 
@@ -72,12 +70,12 @@ async def query_oauth_authorize(req, scopes, dest_uri=None):
     suuid = str(_uuid)
     uri = sec['auth_uri']
     query = {
-        'client_id':     sec['client_id'],
-        'redirect_uri':  pick_redirect_uri(req, sec['redirect_uris']),
+        'client_id': sec['client_id'],
+        'redirect_uri': pick_redirect_uri(req, sec['redirect_uris']),
         'response_type': 'code',
-        'scope':         ' '.join(scopes),
-        'access_type':   'online',
-        'state':         suuid,
+        'scope': ' '.join(scopes),
+        'access_type': 'online',
+        'state': suuid,
     }
 
     dest = str(dest_uri or req.url.relative())
@@ -103,11 +101,11 @@ async def query_oauth_access(req, auth_code):
 
     uri = sec['token_uri']
     payload = {
-        'client_id':     sec['client_id'],
+        'client_id': sec['client_id'],
         'client_secret': sec['client_secret'],
-        'code':          auth_code,
-        'grant_type':    'authorization_code',
-        'redirect_uri':  pick_redirect_uri(req, sec['redirect_uris']),
+        'code': auth_code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': pick_redirect_uri(req, sec['redirect_uris']),
     }
 
     async with aiohttp.ClientSession() as session:
@@ -217,6 +215,7 @@ async def do_logout(db, sid):
 
 routes = aioweb.RouteTableDef()
 
+
 @routes.get('/')
 async def _(req):
     sid = req.cookies.get('session_id', None)
@@ -293,6 +292,7 @@ async def logout_route(req):
         location='/',
         headers=cookie_headers,
     )
+
 
 routes.post('/logout')(logout_route)
 
@@ -437,8 +437,8 @@ def child_record(f):
         'file_id': f['_id'],
         **{
             k: f[k]
-           for k in ['google_id', 'name', 'type', 'mime',
-                     'size', 'owner', 'shared_with', 'mtime']
+            for k in ['google_id', 'name', 'type', 'mime',
+                      'size', 'owner', 'shared_with', 'mtime']
         }
     }
 
@@ -777,6 +777,75 @@ def make_subrecord_query(file_id, nosubdir):
         return {'upper_dirs.id': file_id}
     else:
         return {'parent': file_id}
+
+
+@routes.get('/query/another-users-files')
+@aiohttp_jinja2.template('report-generic.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                             'shared_via_link': {"$ne": None}}).to_list(None)
+
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+    }
+
+
+@routes.get('/query/another-users-files-catalogue')
+@aiohttp_jinja2.template('report-generic.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                             'shared_via_link': {"$ne": None}}).to_list(None)
+
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+    }
+
+
+@routes.get('/query/big-files')
+@aiohttp_jinja2.template('report-generic.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    size = int(req.url.query.getone("fileSize", None)) * 1024 * 1024
+
+    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                             'size': {"$gt": size}}).to_list(None)
+
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'sizequery' : True,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+    }
 
 
 @routes.get('/query/shared-via-link')
