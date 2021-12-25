@@ -218,24 +218,12 @@ async def do_logout(db, sid):
 routes = aioweb.RouteTableDef()
 
 @routes.get('/')
-# @aiohttp_jinja2.template('index.html')
 async def _(req):
     sid = req.cookies.get('session_id', None)
     if sid is None:
         raise aioweb.HTTPFound(location='/login')
 
-    raise aioweb.HTTPFound(location='/update')
-
-    # user = await user_info(req)
-    # coll = req.app['db'][make_files_collname(user)]
-    # nfiles = await coll.count_documents({})
-    #
-    # return {
-    #     'title': "Index",
-    #     'session_id': sid,
-    #     'user': user,
-    #     'nfiles': nfiles,
-    # }
+    raise aioweb.HTTPFound(location='/main')
 
 
 def top_dirs(file_rec):
@@ -272,10 +260,12 @@ async def _(req):
         'dirs': dirs,
     }
 
+
 @routes.get('/dologin')
 async def _(req):
     raise await query_oauth_authorize(req, GOOGLE_API_SCOPES,
-                                      dest_uri='/')
+                                      dest_uri='/update')
+
 
 @routes.get('/login')
 @aiohttp_jinja2.template('login.html')
