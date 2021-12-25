@@ -218,24 +218,12 @@ async def do_logout(db, sid):
 routes = aioweb.RouteTableDef()
 
 @routes.get('/')
-@aiohttp_jinja2.template('index.html')
 async def _(req):
     sid = req.cookies.get('session_id', None)
     if sid is None:
         raise aioweb.HTTPFound(location='/login')
 
-    # TODO: redirect to root dir page
-
-    user = await user_info(req)
-    coll = req.app['db'][make_files_collname(user)]
-    nfiles = await coll.count_documents({})
-
-    return {
-        'title': "Index",
-        'session_id': sid,
-        'user': user,
-        'nfiles': nfiles,
-    }
+    raise aioweb.HTTPFound(location='/main')
 
 
 def top_dirs(file_rec):
@@ -272,10 +260,12 @@ async def _(req):
         'dirs': dirs,
     }
 
+
 @routes.get('/dologin')
 async def _(req):
     raise await query_oauth_authorize(req, GOOGLE_API_SCOPES,
-                                      dest_uri='/')
+                                      dest_uri='/update')
+
 
 @routes.get('/login')
 @aiohttp_jinja2.template('login.html')
@@ -569,11 +559,18 @@ async def recreate_files_collection(req, user):
     await new_coll.rename(collname)
 
 
+@routes.get('/update')
+@aiohttp_jinja2.template('update.html')
+async def _(req):
+    # user = await user_info(req)
+    # raise aioweb.HTTPFound(location='/reload')
+    alog.debug(f'Updating data base')
+
+
 @routes.get('/reload')
 async def _(req):
     user = await user_info(req)
     await recreate_files_collection(req, user)
-
     raise aioweb.HTTPFound(location='/main')
 
 
@@ -692,8 +689,8 @@ async def _(req):
     dir_id = int(req.url.query.getone("id"))
     dir_rec = await coll.find_one({'_id': dir_id})
 
-    searchUser = req.url.query.getone("userName", None)
-    print('@' in searchUser)
+    regex = req.url.query.getone("userName", None)
+    searchUser = '*' + regex + '*'
 
     if '@' in searchUser:
         if owner:
@@ -746,7 +743,7 @@ async def _(req):
         'files': [child_record(f) for f in files],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
-        'user_name': searchUser
+        'user_name': regex
 
     }
 
@@ -762,9 +759,10 @@ async def _(req):
     dir_rec = await coll.find_one({'_id': dir_id})
 
     regex = req.url.query.getone("fileName", None)
+    searchByName = '*' + regex + '*';
 
     files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
-                             'name': {"$regex": fnmatch.translate(regex)}}).to_list(None)
+                             'name': {"$regex": fnmatch.translate(searchByName)}}).to_list(None)
     return {
         'name': user['name'],
         'nosubdir': nosubdir,
