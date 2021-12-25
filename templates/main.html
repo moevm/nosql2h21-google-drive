@@ -1,69 +1,90 @@
 {% extends "base-twopane.html" %}
 {% import "base-macros.html" as base %}
 {% block style %}
-  details > summary{
+    details > summary{
     cursor: default;
-  }
+    }
 
-  details > form {
+    details > form {
     margin-left: 1em;
-  }
+    }
 {% endblock style %}
 {% block leftpane %}
-  <form id="leftButtons">
-    <label>
-      <input type="checkbox" id="nosubdir-checkbox"
-             name="nosubdir" {% if nosubdir %} checked {% endif %}>
-      Без подкаталогов
-    </label>
-    <div>
-      <input type="hidden" name="id" value="{{ dirs[-1]['id'] }}">
-      <details id="buttonGroupReports">
-        <summary>Отчёты</summary>
-        <div id="reportFilesSharedViaLink">
-          <div>Все файлы, к которым есть доступ по ссылке:</div>
-          <input type="submit"
-                 formaction="/query/shared-via-link"
-                 value="Показать"
-          >
+    <form id="leftButtons">
+        <label>
+            <input type="checkbox" id="nosubdir-checkbox"
+                   name="nosubdir" {% if nosubdir %} checked {% endif %}>
+            Без подкаталогов
+        </label>
+        <div>
+            <input type="hidden" name="id" value="{{ dirs[-1]['id'] }}">
+            <details id="buttonGroupReports">
+                <summary>Отчёты</summary>
+                <div id="reportFilesSharedViaLink">
+                    <div>Все файлы, к которым есть доступ по ссылке:</div>
+                    <input type="submit"
+                           formaction="/query/shared-via-link"
+                           value="Показать"
+                    >
+                </div>
+                <div id="reportFilesSharedViaLink">
+                    <div>Все файлы, которыми не владеет текущий пользователь:</div>
+                    <input type="submit"
+                           formaction="/query/shared-via-link"
+                           value="Показать"
+                    >
+                </div>
+                <div id="reportFilesSharedViaLink">
+                    <div>Все файлы, которые не принадлежат владельцу каталога:</div>
+                    <input type="submit"
+                           formaction="/query/shared-via-link"
+                           value="Показать"
+                    >
+                </div>
+                <div id="reportFilesSharedViaLink">
+                    <div>Все файлы, большого размера:</div>
+                    <input type="submit"
+                           formaction="/query/shared-via-link"
+                           value="Показать"
+                    >
+                </div>
+            </details>
+            <details id="buttonGroupSearches">
+                <summary>Поиск</summary>
+                <div id="searchByName">
+                    <div>Поиск по имени файла:</div>
+                    <input type="text" id="fileName" name="fileName">
+                    <input type="submit"
+                           formaction="/query/search-by-name"
+                           value="Показать"
+                    >
+                </div>
+                <br>
+                <div id="searchByUser">
+                    <div>Поиск по пользователю:</div>
+                    <label>
+                        <input type="checkbox" id="owner-checkbox" name="owner" {% if owner %} checked {% endif %}>
+                        Только владельцы
+                    </label>
+                    <br>
+                    <input type="text" id="userName" name="userName">
+                    <input type="submit"
+                           formaction="/query/search-by-user"
+                           value="Показать"
+                    >
+                </div>
+            </details>
+            <details id="buttonGroupGrouping">
+                <summary>Группировка</summary>
+            </details>
+            <details id="buttonGroupImportExport">
+                <summary>Импорт/Экспорт</summary>
+            </details>
         </div>
-      </details>
-      <details id="buttonGroupSearches">
-        <summary>Поиск</summary>
-        <div id="searchByName">
-          <div>Поиск по имени файла:</div>
-          <input type="text" id="fileName" name="fileName">
-          <input type="submit"
-                 formaction="/query/search-by-name"
-                 value="Показать"
-          >
-        </div>
-        <br>
-        <div id="searchByUser">
-          <div>Поиск по пользователю:</div>
-          <label>
-            <input type="checkbox" id="owner-checkbox" name="owner" {% if owner %} checked {% endif %}>
-            Только владельцы
-          </label>
-          <br>
-          <input type="text" id="userName" name="userName">
-          <input type="submit"
-                 formaction="/query/search-by-user"
-                 value="Показать"
-          >
-        </div>
-      </details>
-      <details id="buttonGroupGrouping">
-        <summary>Группировка</summary>
-      </details>
-      <details id="buttonGroupImportExport">
-        <summary>Импорт/Экспорт</summary>
-      </details>
-    </div>
-  </form>
+    </form>
 {% endblock leftpane %}
 {% block filetab %}
-  {% for file in files %}
-    {{ base.file_entry(file) }}
-  {% endfor %}
+    {% for file in files %}
+        {{ base.file_entry(file) }}
+    {% endfor %}
 {% endblock filetab %}

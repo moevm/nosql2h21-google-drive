@@ -397,7 +397,6 @@ def file_from_gdrive(f):
     anyone_perm = None
     owner_perm = None
     other_perms = []
-
     for perm in f['permissions']:
         if perm['type'] == 'anyone':
             assert anyone_perm is None

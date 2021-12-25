@@ -3,3 +3,6 @@ aiohttp-jinja2==1.5
 Jinja2==3.0.1
 motor==2.5.1
 gaggle==0.2.1
+alog==0.9.13
+multidict==5.2.0
+yarl==1.7.2
