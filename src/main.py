@@ -791,7 +791,7 @@ async def _(req):
     dir_rec = await coll.find_one({'_id': dir_id})
 
     files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
-                             'shared_via_link': {"$ne": None}}).to_list(None)
+                             'shared_with.email': {"$eq": user['email']}}).to_list(None)
 
     return {
         'name': user['name'],
