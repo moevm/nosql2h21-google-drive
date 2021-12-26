@@ -812,13 +812,22 @@ async def _(req):
     dir_id = int(req.url.query.getone("id"))
     dir_rec = await coll.find_one({'_id': dir_id})
 
-    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
-                             'owner.email': {"$ne": dir_rec['owner']['email']}}).to_list(None)
+    if not nosubdir:
+        sel = {'$or': [{'_id': dir_id}, {'upper_dirs.id': dir_id}]}
+    else:
+        sel = {'_id': dir_id}
+
+    files = await coll.aggregate([
+        {'$match': sel},
+        {'$unwind': "$children"},
+        {'$match': {'$expr': {'$ne': ["$owner.email", "$children.owner.email"]}}},
+        {'$replaceRoot': {'newRoot': '$children'}},
+    ]).to_list(None)
 
     return {
         'name': user['name'],
         'nosubdir': nosubdir,
-        'files': [child_record(f) for f in files],
+        'files': [child_record({**f, '_id': f['file_id']}) for f in files],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
     }
