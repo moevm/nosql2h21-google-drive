@@ -790,8 +790,19 @@ async def _(req):
     dir_id = int(req.url.query.getone("id"))
     dir_rec = await coll.find_one({'_id': dir_id})
 
-    files = await coll.find({**make_subrecord_query(dir_id, nosubdir),
-                             'owner.email': {"$ne": user['email']}}).to_list(None)
+    files = await coll.find({
+        "$and": [
+            make_subrecord_query(dir_id, nosubdir),
+            {"$expr": {
+                "$ne": [
+                    0,
+                    {"$strcasecmp": [
+                        "$owner.email",
+                        user['email'],
+                    ]}
+                ]
+            }},
+        ]}).to_list(None)
 
     return {
         'name': user['name'],
