@@ -28,6 +28,6 @@
 {% endblock leftpane %}
 {% block filetab %}
     {% for file in files %}
-        {{ base.file_entry(file) }}
+        {{ base.file_entry(file, 1) }}
     {% endfor %}
 {% endblock filetab %}

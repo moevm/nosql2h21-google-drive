@@ -1,21 +1,25 @@
-{% macro file_entry(file) %}
-    {% if groupby %}
-        {% for group in file %}
-            {{ group }}
-        {% endfor %}
+{% macro file_entry(file, flag) %}
+    {% if flag %}
         <tr>
-            <td><input type="checkbox" class="files"></td>
-            <td>
-                {% if file['type']==2 %}
-                    <a href="/main?id={{ file['file_id'] }}"><code>{{ file['name'] }}</code></a>
-                {% else %}
-                    {{ file['name'] }}
-                {% endif %}
+            <td colspan="6" style="background-color: #ccc">
+                Файлы: {{ file[1] }}
             </td>
-            <td>{{ file['size'] or '-' }}</td>
-            <td>{{ file['mtime'].strftime('%Y-%m-%d') }}</td>
-            <td>{{ file['owner']['name'] }}</td>
         </tr>
+        {% for f in file[0] %}
+            <tr>
+                <td><input type="checkbox" class="files"></td>
+                <td>
+                    {% if f['type']==2 %}
+                        <a href="/main?id={{ f['file_id'] }}"><code>{{ f['name'] }}</code></a>
+                    {% else %}
+                        {{ f['name'] }}
+                    {% endif %}
+                </td>
+                <td>{{ f['size'] or '-' }}</td>
+                <td>{{ f['mtime'].strftime('%Y-%m-%d') }}</td>
+                <td>{{ f['owner']['name'] }}</td>
+            </tr>
+        {% endfor %}
     {% else %}
         <tr>
             <td><input type="checkbox" class="files"></td>

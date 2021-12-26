@@ -872,7 +872,7 @@ async def _(req):
 
 
 @routes.get('/query/group-by-user')
-@aiohttp_jinja2.template('report-generic.html')
+@aiohttp_jinja2.template('group-generic.html')
 async def _(req):
     user = await user_info(req)
     coll = req.app['db'][make_files_collname(user)]
@@ -881,18 +881,19 @@ async def _(req):
     dir_id = int(req.url.query.getone("id"))
     dir_rec = await coll.find_one({'_id': dir_id})
 
+    unique_users = await coll.distinct('owner.email')
+
     files = [await coll.find({**make_subrecord_query(dir_id, nosubdir),
-                              dir_rec.owner.email: {"$eq": x}}).to_list(None) for x, y in
-             coll.distinct('owner.email').to_list(None)]
+                              'owner.email': {"$eq": x}}).to_list(None) for x in
+             unique_users]
 
     return {
         'name': user['name'],
         'nosubdir': nosubdir,
-        'files': [child_record(f) for f in files],
+        'files': [([child_record(f) for f in x],y) for x,y in zip(files,unique_users)],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
         'groupby': True,
-        'groupnames': coll.distinct('owner.email').to_list(None)
     }
 
 
@@ -920,7 +921,9 @@ async def make_app(argv):
         app,
         loader=jinja2.FileSystemLoader('templates'),
         autoescape=jinja2.select_autoescape(['html', 'xml']),
+
     )
+
 
     return app
 
