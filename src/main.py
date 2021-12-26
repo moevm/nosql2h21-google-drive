@@ -626,7 +626,7 @@ async def _(req):
         ).people('v1')
         resp = await people.people.get(
             resourceName='people/me',
-            personFields='metadata,names',
+            personFields='metadata,names,emailAddresses',
         )
         if not resp.ok:
             resp.content.set_exception(None)
@@ -641,6 +641,7 @@ async def _(req):
         info = {
             'auth_code': auth_code,
             'name': j['names'][0]['displayName'],
+            'email': j['emailAddresses'][0]['value'],
         }
 
     await user_update_access(req, uid, info, r, new=True)
