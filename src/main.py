@@ -907,19 +907,18 @@ async def _(req):
     dir_id = int(req.url.query.getone("id"))
     dir_rec = await coll.find_one({'_id': dir_id})
 
-    size1 = [0, 2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20]
     size2 = [2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20, math.inf]
 
-    files = [await coll.find({**make_subrecord_query(dir_id, nosubdir),
-                              '$and': [{'size': {"$gt": x}}, {'size': {"$lt": y}}]}).to_list(None) for x, y in
-             zip(size1, size2)]
+    files = await coll.aggregate([{'$match': {**make_subrecord_query(dir_id, nosubdir),'size':{'$ne':None}}},
+                                {'$bucket': {'groupBy': '$size', 'boundaries': size2, 'default': 0,
+                                             'output': {'files': {'$addToSet': '$$ROOT'}}}}]).to_list(None)
 
     size = ["менее 1Mb", "менее 100Mb", "менее 1Gb", "более 1Gb"]
 
     return {
         'name': user['name'],
         'nosubdir': nosubdir,
-        'files': [([child_record(f) for f in x], y) for x, y in zip(files, size)],
+        'files': [([child_record(f) for f in x['files']], y) for x, y in zip(files, size)],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
         'groupby': True,
