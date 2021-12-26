@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import math
 import sys
 import json
 import uuid
@@ -890,7 +890,36 @@ async def _(req):
     return {
         'name': user['name'],
         'nosubdir': nosubdir,
-        'files': [([child_record(f) for f in x],y) for x,y in zip(files,unique_users)],
+        'files': [([child_record(f) for f in x], y) for x, y in zip(files, unique_users)],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+        'groupby': True,
+    }
+
+
+@routes.get('/query/group-by-size')
+@aiohttp_jinja2.template('group-generic.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    size1 = [0, 2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20]
+    size2 = [2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20, math.inf]
+
+    files = [await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                              '$and': [{'size': {"$gt": x}}, {'size': {"$lt": y}}]}).to_list(None) for x, y in
+             zip(size1, size2)]
+
+    size = ["менее 1Mb", "менее 100Mb", "менее 1Gb", "более 1Gb"]
+
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'files': [([child_record(f) for f in x], y) for x, y in zip(files, size)],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
         'groupby': True,
@@ -923,7 +952,6 @@ async def make_app(argv):
         autoescape=jinja2.select_autoescape(['html', 'xml']),
 
     )
-
 
     return app
 
