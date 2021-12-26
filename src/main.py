@@ -843,6 +843,7 @@ async def _(req):
         'name': user['name'],
         'nosubdir': nosubdir,
         'sizequery': True,
+        'filesize': req.url.query.getone("fileSize", None),
         'files': [child_record(f) for f in files],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
@@ -909,9 +910,9 @@ async def _(req):
 
     size = [2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20]
 
-    files = await coll.aggregate([{'$match': {**make_subrecord_query(dir_id, nosubdir),'size':{'$ne':None}}},
-                                {'$bucket': {'groupBy': '$size', 'boundaries': size, 'default': 0,
-                                             'output': {'files': {'$addToSet': '$$ROOT'}}}}]).to_list(None)
+    files = await coll.aggregate([{'$match': {**make_subrecord_query(dir_id, nosubdir), 'size': {'$ne': None}}},
+                                  {'$bucket': {'groupBy': '$size', 'boundaries': size, 'default': 0,
+                                               'output': {'files': {'$addToSet': '$$ROOT'}}}}]).to_list(None)
 
     size = ["менее 1Mb", "менее 100Mb", "менее 1Gb", "более 1Gb"]
 

@@ -16,7 +16,7 @@
             <input type="checkbox" id="nosubdir-checkbox"
                    name="nosubdir" {% if nosubdir %} checked {% endif %}>
             Без подкаталогов
-            {% if sizequery %}<br><input type="number" id="fileSize" name="fileSize" value="50" min="1"> Мб{% endif %}
+            {% if sizequery %}<br><input type="number" id="fileSize" name="fileSize" value="{{ filesize }}" min="1"> Мб{% endif %}
         </label>
         <input type="hidden" name="id" value="{{ dirs[-1]['id'] }}">
         <div id="leftNavLine">
