@@ -842,7 +842,7 @@ async def _(req):
     return {
         'name': user['name'],
         'nosubdir': nosubdir,
-        'sizequery' : True,
+        'sizequery': True,
         'files': [child_record(f) for f in files],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
@@ -868,6 +868,31 @@ async def _(req):
         'files': [child_record(f) for f in files],
         'dirs': top_dirs(dir_rec),
         'path': req.url.path,
+    }
+
+
+@routes.get('/query/group-by-user')
+@aiohttp_jinja2.template('report-generic.html')
+async def _(req):
+    user = await user_info(req)
+    coll = req.app['db'][make_files_collname(user)]
+
+    nosubdir = req.url.query.getone('nosubdir', None) == 'on'
+    dir_id = int(req.url.query.getone("id"))
+    dir_rec = await coll.find_one({'_id': dir_id})
+
+    files = [await coll.find({**make_subrecord_query(dir_id, nosubdir),
+                              dir_rec.owner.email: {"$eq": x}}).to_list(None) for x, y in
+             coll.distinct('owner.email').to_list(None)]
+
+    return {
+        'name': user['name'],
+        'nosubdir': nosubdir,
+        'files': [child_record(f) for f in files],
+        'dirs': top_dirs(dir_rec),
+        'path': req.url.path,
+        'groupby': True,
+        'groupnames': coll.distinct('owner.email').to_list(None)
     }
 
 
