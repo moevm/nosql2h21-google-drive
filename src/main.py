@@ -907,10 +907,10 @@ async def _(req):
     dir_id = int(req.url.query.getone("id"))
     dir_rec = await coll.find_one({'_id': dir_id})
 
-    size2 = [2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20, math.inf]
+    size = [2 ** 20, 100 * 2 ** 20, 1024 * 2 ** 20]
 
     files = await coll.aggregate([{'$match': {**make_subrecord_query(dir_id, nosubdir),'size':{'$ne':None}}},
-                                {'$bucket': {'groupBy': '$size', 'boundaries': size2, 'default': 0,
+                                {'$bucket': {'groupBy': '$size', 'boundaries': size, 'default': 0,
                                              'output': {'files': {'$addToSet': '$$ROOT'}}}}]).to_list(None)
 
     size = ["менее 1Mb", "менее 100Mb", "менее 1Gb", "более 1Gb"]
